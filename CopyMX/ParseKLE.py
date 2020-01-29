@@ -1,5 +1,6 @@
 import json
 import math
+import matplotlib.pyplot as plt
 
 
 def rotate(origin, point, angle):
@@ -91,8 +92,15 @@ def deserialize(keeb):
 
 
 def get_parsed():
-    with open('./layout.txt', 'r') as fp:
-        return [rotate_key(key) for key in deserialize(json.load(fp))]
+    with open('./layout.json', 'r') as fp:
+        return [(*rotate_key(key), key['width']) for key in deserialize(json.load(fp))]
 
 
-print(get_parsed())
+xs, ys, widths = [*zip(*get_parsed())]
+plt.axis('equal')
+plt.plot([x + w/2 for (x, w) in zip(xs, widths)], [-y for y in ys], 'kP')
+plt.show()
+
+
+# print([*xs])
+# print([*ys])

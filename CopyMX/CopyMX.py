@@ -1,54 +1,127 @@
-#Author-Autodesk Inc.
-#Description-Simple script display a message.
+# Author-Autodesk Inc.
+# Description-Simple script display a message.
 
-import adsk.core, traceback
+import adsk.core  # pylint: disable=import-error
+import traceback
 import re
+import json
+import pathlib
+import math
 
-LAYOUT = """
-[["Esc","Q","W","E","R","T","Y","U","I","O","P","[", "]","Back\\n\\n\\n\\n\\n\\nspace"],
-[{w:1.25},"Tab\\n\\n\\n1.25","A","S","D","F","G","H","J","K","L",":\\n;","",{w:1.75},"Enter\\n\\n\\n1.75"],
-[{w:1.75},"Shift\\n\\n\\n1.75","Z","X","C","V","B","N","M","<\\n,",">\\n.","?\\n/",{c:"#66d1e8",w:1.25},"Shift\\n\\n\\n1.25","Fn"],
-[{c:"#cccccc",w:1.25},"Ctrl\\n\\n\\n1.25",{x:1,w:1.25},"Alt\\n\\n\\n1.25",{w:7},"\\n\\n\\n7",{w:1.25},"Alt\\n\\n\\n1.25",{x:1,w:1.25},"Ctrl\\n\\n\\n1.25"]]
-"""
 
-def parse_layout():
-  layout = eval(re.sub(r'([a-z]):', r'"\1":', LAYOUT))
+class dotdict(dict):
+    """dot.notation access to dictionary attributes"""
+    __getattr__ = dict.get
+    __setattr__ = dict.__setitem__
+    __delattr__ = dict.__delitem__
 
-  w = 1
-  res = []
-  for _row in layout:
-    row = []
-    x = 1
-    for key in _row:
-      if isinstance(key, dict):
-        if key.get('w'):
-          w = float(key.get('w'))
-        if key.get('x'):
-          x += float(key.get('x'))
-        continue
 
-      if key.split():
-        key = key.split()[0]
+def deserialize(rows):
+    # Initialize with defaults
+    current = dotdict(dict(
+        x=0, y=0, x2=0, y2=0,                         # position
+        width=1, height=1, width2=1, height2=1,       # size
+        rotation_angle=0, rotation_x=0, rotation_y=0,  # rotation
+    ))
+    keys = []
+    cluster = dotdict(dict(x=0, y=0))
+    for (r, row) in enumerate(rows):
+        if isinstance(row, list):
+            for k, key in enumerate(row):
+                if isinstance(key, str):
+                    newKey = dotdict(current.copy())
+                    newKey.width2 = current.width if newKey.width2 == 0 else current.width2
+                    newKey.height2 = current.height if newKey.height2 == 0 else current.height2
+                    # Add the key!
+                    keys.append(newKey)
 
-      row.append([x, w, key])
-      x = x + w
-      w = 1
-    res.append(row)
+                    # Set up for the next key
+                    current.x += current.width
+                    current.width = current.height = 1
+                    current.x2 = current.y2 = current.width2 = current.height2 = 0
 
-  return res
+                else:
+                    key = dotdict(key)
+                    if key.r:
+                        current.rotation_angle = key.r
+                    if key.rx:
+                        current.rotation_x = cluster.x = key.rx
+                        current.update(cluster)
+                    if key.ry:
+                        current.rotation_y = cluster.y = key.ry
+                        current.update(cluster)
+                    if key.x:
+                        current.x += key.x
+                    if key.y:
+                        current.y += key.y
+                    if key.w:
+                        current.width = current.width2 = key.w
+                    if key.h:
+                        current.height = current.height2 = key.h
+                    if key.x2:
+                        current.x2 = key.x2
+                    if key.y2:
+                        current.y2 = key.y2
+                    if key.w2:
+                        current.width2 = key.w2
+                    if key.h2:
+                        current.height2 = key.h2
+            # End of the row
+            current.y += 1
+        current.x = current.rotation_x
+    return keys
 
-def add_switch(rootComp, occ, mx, xPos, yPos):
-    transform = adsk.core.Matrix3D.create()
+
+def offset_key(key):
+    new_key = key.copy()
+    new_key['x'] = new_key['x'] + new_key['width'] / 2
+    new_key['y'] = new_key['y'] + new_key['height'] / 2
+    return new_key
+
+
+def rotate(origin, point, angle):
+    """
+    Rotate a point counterclockwise by a given angle around a given origin.
+
+    The angle should be given in radians.
+    """
+    # angle = angle if angle == 0 else 180-angle
+    ox, oy = origin
+    px, py = point
+
+    qx = ox + math.cos(angle) * (px - ox) - math.sin(angle) * (py - oy)
+    qy = oy + math.sin(angle) * (px - ox) + math.cos(angle) * (py - oy)
+    return qx, qy
+
+
+def rotate_key(key):
+    dx, dy = rotate((key['rotation_x'], key['rotation_y']),
+                    (key['x'], key['y']), math.radians(key['rotation_angle']))
+    new_key = key.copy()
+    new_key['x'] = dx
+    new_key['y'] = dy
+    new_key['rotation_angle'] = key['rotation_angle']
+    return new_key
+
+
+def add_switch(rootComp, occ, mx, xPos, yPos, ng, ui):
+    # transform = adsk.core.Matrix3D.create()
     ogTransform = occ.transform
-    ogTransform.translation = adsk.core.Vector3D.create(ogTransform.translation.x + (1.905 * xPos), ogTransform.translation.y + (1.905 * yPos), ogTransform.translation.z)
+    ogTransform.translation = adsk.core.Vector3D.create(ogTransform.translation.x + (
+        1.905 * xPos), ogTransform.translation.y + (1.905 * yPos), ogTransform.translation.z)
+    [success, origin, axis] = occ.component.zConstructionAxis.geometry.getData()
+    # ui.messageBox(str(x))
+    ogTransform.translation = ogTransform.translation.setToRotation(
+        math.radians(ng), axis, origin)
     newOcc = rootComp.occurrences.addExistingComponent(mx, ogTransform)
     newOcc.transform = ogTransform
+
 
 def run(context):
     ui = None
     try:
         app = adsk.core.Application.get()
-        ui  = app.userInterface
+        ui = app.userInterface
 
         design = app.activeProduct
         rootComp = design.rootComponent
@@ -60,14 +133,21 @@ def run(context):
                 mx = occ.component
                 break
 
-        rows = parse_layout()
-        for y, row in enumerate(rows):
-            # xpos = -1
-            for keyDef in row:
-                px, size, key = keyDef
-                x = px - 1 + ((size-1)/2)
-                # xpos += size
-                add_switch(rootComp, occ, mx, x, -y)
+        with open(pathlib.Path(__file__).parent / './keyboard-layout.json', 'r') as fp:
+            keys = deserialize(json.load(fp))
+
+        keys = [offset_key(key) for key in keys]
+        keys = [rotate_key(key) for key in keys]
+        # xs = [key['x'] for key in keys]
+        # ys = [-key['y'] for key in keys]
+        # ngs = [-key['rotation_angle'] + 90 for key in keys]
+
+        for key in keys:
+            x = key['x']
+            y = -key['y']
+            ng = -key['rotation_angle'] + 90
+            # xpos += size
+            add_switch(rootComp, occ, mx, x, -y, ng, ui)
 
     except:
         if ui:

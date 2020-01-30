@@ -1,24 +1,7 @@
 import json
 import math
 import matplotlib.pyplot as plt
-
-
-def rotate(origin, point, angle):
-    """
-    Rotate a point counterclockwise by a given angle around a given origin.
-
-    The angle should be given in radians.
-    """
-    ox, oy = origin
-    px, py = point
-
-    qx = ox + math.cos(angle) * (px - ox) - math.sin(angle) * (py - oy)
-    qy = oy + math.sin(angle) * (px - ox) + math.cos(angle) * (py - oy)
-    return qx, qy
-
-
-def rotate_key(key):
-    return rotate((key['rotation_x'], key['rotation_y']), (key['x'], key['y']), math.radians(key['rotation_angle']))
+import pathlib
 
 
 def gen_plain_key(prev):
@@ -91,14 +74,57 @@ def deserialize(keeb):
     return parsed_keeb
 
 
-def get_parsed():
-    with open('./layout.json', 'r') as fp:
-        return [(*rotate_key(key), key['width']) for key in deserialize(json.load(fp))]
+# def get_parsed(key_data):
+#     return [(*rotate_key(key), key['width']) for key in key_data]
 
 
-xs, ys, widths = [*zip(*get_parsed())]
+# def offset_by_widths(xs, widths):
+#     return [x + w/2 for (x, w) in zip(xs, widths)]
+
+def rotate(origin, point, angle):
+    """
+    Rotate a point counterclockwise by a given angle around a given origin.
+
+    The angle should be given in radians.
+    """
+    angle = angle if angle == 0 else 180-angle
+    ox, oy = origin
+    px, py = point
+
+    qx = ox + math.cos(angle) * (px - ox) - math.sin(angle) * (py - oy)
+    qy = oy + math.sin(angle) * (px - ox) + math.cos(angle) * (py - oy)
+    return qx, qy
+
+
+def rotate_key(key):
+    dx, dy = rotate((key['rotation_x'], key['rotation_y']),
+                    (key['x'], key['y']), math.radians(key['rotation_angle']))
+    new_key = key.copy()
+    new_key['x'] = dx
+    new_key['y'] = dy
+    new_key['rotation_angle'] = -key['rotation_angle']
+    return new_key
+
+
+def offset_by_width(key):
+    new_key = key.copy()
+    new_key['x'] = new_key['x'] + new_key['width'] / 2
+    return new_key
+
+
+with open(pathlib.Path(__file__).parent / './keyboard-layout.json', 'r') as fp:
+    key_data = deserialize(json.load(fp))
+
+offset = [offset_by_width(key) for key in key_data]
+rotated = [rotate_key(key) for key in offset]
+xs = [key['x'] for key in rotated]
+ys = [-key['y'] for key in rotated]
+ngs = [key['rotation_angle'] + 90 for key in rotated]
+# xs, ys, widths = [zip(*[[key['x'], -key['y'], key['width']]
+#                         for key in rotated])]
+# pairs = [pair for pair in zip(xs_off, ys_inv)]
 plt.axis('equal')
-plt.plot([x + w/2 for (x, w) in zip(xs, widths)], [-y for y in ys], 'kP')
+plt.quiver(xs, ys, [0.5 for x in xs], [0.5 for y in ys], angles=ngs)
 plt.show()
 
 

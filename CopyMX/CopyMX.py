@@ -107,15 +107,31 @@ def rotate_key(key):
 def add_switch(rootComp, occ, xPos, yPos, ng):
     # transform = adsk.core.Matrix3D.create()
     ogTransform = occ.transform
+    rotY = adsk.core.Matrix3D.create()
+    rotY.setToRotation(
+        math.radians(ng),
+        adsk.core.Vector3D.create(
+            0, 0, 1
+        ),
+        adsk.core.Point3D.create(0, 0, 0)
+    )
+    ogTransform.transformBy(rotY)
     ogTransform.translation = adsk.core.Vector3D.create(ogTransform.translation.x + (
         1.905 * xPos), ogTransform.translation.y + (1.905 * yPos), ogTransform.translation.z)
     # [success, origin, axis] = occ.component.zConstructionAxis.geometry.getData()
     # ui.messageBox(str(x))
     # ogTransform.translation = ogTransform.translation.setToRotation(
     #    math.radians(ng), axis, origin)
+
     newOcc = rootComp.occurrences.addExistingComponent(
         occ.component, ogTransform)
     newOcc.transform = ogTransform
+    # newOcc.transformBy()
+    # newTrans = newOcc.transform
+    # newTrans.translation = rotY
+    # newOcc2 = rootComp.occurrences.addExistingComponent(
+    #     newOcc.component, newTrans)
+    # newOcc2.transform = newTrans
 
 
 def run(context):
@@ -129,9 +145,11 @@ def run(context):
         comp = design.activeComponent
         features = rootComp.features
 
-        switch_collection = adsk.core.ObjectCollection.create()
+        #switch_collection = adsk.core.ObjectCollection.create()
         mx_switch_occ = import_switch_model(app).item(0)
-        switch_collection.add(mx_switch_occ)
+        swocc_transf = mx_switch_occ.transform
+
+        # switch_collection.add(mx_switch_occ)
 
         min_bb = mx_switch_occ.boundingBox.minPoint
         max_bb = mx_switch_occ.boundingBox.maxPoint
@@ -147,6 +165,15 @@ def run(context):
 # try it this way: http://help.autodesk.com/view/fusion360/ENU/?caas=caas/discussion/t5/Fusion-360-API-and-Scripts/Is-it-possible-to-Rotate-a-body-by-multiple-angles-as-you-can-do-in-the-Move-UI/td-p/6234792.html
         trans = adsk.core.Matrix3D.create()
 
+        rotY = adsk.core.Matrix3D.create()
+        rotY.setToRotation(
+            math.pi,
+            adsk.core.Vector3D.create(
+                0, 1, 0
+            ),
+            adsk.core.Point3D.create(0, 0, 0)
+        )
+        trans.transformBy(rotY)
         rotX = adsk.core.Matrix3D.create()
         rotX.setToRotation(
             math.pi/2,
@@ -157,18 +184,25 @@ def run(context):
         )
         trans.transformBy(rotX)
 
-        rotY = adsk.core.Matrix3D.create()
-        rotY.setToRotation(math.pi/2, adsk.core.Vector3D.create(0,
-                                                                1, 0), adsk.core.Point3D.create(0, 0, 0))
-        trans.transformBy(rotY)
+        # ui.messageBox('about to apply')
 
-        moveInput = rootComp.features.moveFeatures.createInput(
-            switch_collection, trans)
-        ui.messageBox('count:\n{}'.format(moveInput.objectType))
-        rootComp.features.moveFeatures.add(moveInput)
+        swocc_transf.transform = trans
+        fixed_rot_occ = rootComp.occurrences.addExistingComponent(
+            mx_switch_occ.component, swocc_transf.transform)
+
+        # rotY = adsk.core.Matrix3D.create()
+        # rotY.setToRotation(math.pi/2, adsk.core.Vector3D.create(0,
+        #                                                         1, 0), adsk.core.Point3D.create(0, 0, 0))
+        # trans.transformBy(rotY)
+
+        # moveInput = rootComp.features.moveFeatures.createInput(
+        #     switch_collection, trans)
+        # ui.messageBox('collection:\n{}'.format(switch_collection.objectType))
+        # ui.messageBox('transform:\n{}'.format(trans.objectType))
+        # ui.messageBox('move input:\n{}'.format(moveInput.objectType))
+        # rootComp.features.moveFeatures.add(moveInput)
 
         # ui.messageBox('count:\n{}'.format(occ.objectType))
-        return
         try:
             with open(prompt_KLE_file_select(ui), 'r') as fp:
                 keys = deserialize(json.load(fp))
@@ -184,9 +218,9 @@ def run(context):
         for key in keys:
             x = key['x']
             y = -key['y']
-            ng = -key['rotation_angle'] + 90
+            ng = -key['rotation_angle']
             # xpos += size
-            add_switch(rootComp, mx_switch_occ, x, y, ng)
+            add_switch(rootComp, fixed_rot_occ, x, y, ng)
 
     except:
         if ui:

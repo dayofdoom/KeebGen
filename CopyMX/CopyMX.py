@@ -104,16 +104,17 @@ def rotate_key(key):
     return new_key
 
 
-def add_switch(rootComp, occ, mx, xPos, yPos, ng, ui):
+def add_switch(rootComp, occ, xPos, yPos, ng):
     # transform = adsk.core.Matrix3D.create()
     ogTransform = occ.transform
     ogTransform.translation = adsk.core.Vector3D.create(ogTransform.translation.x + (
         1.905 * xPos), ogTransform.translation.y + (1.905 * yPos), ogTransform.translation.z)
-    [success, origin, axis] = occ.component.zConstructionAxis.geometry.getData()
+    # [success, origin, axis] = occ.component.zConstructionAxis.geometry.getData()
     # ui.messageBox(str(x))
-    ogTransform.translation = ogTransform.translation.setToRotation(
-        math.radians(ng), axis, origin)
-    newOcc = rootComp.occurrences.addExistingComponent(mx, ogTransform)
+    # ogTransform.translation = ogTransform.translation.setToRotation(
+    #    math.radians(ng), axis, origin)
+    newOcc = rootComp.occurrences.addExistingComponent(
+        occ.component, ogTransform)
     newOcc.transform = ogTransform
 
 
@@ -126,15 +127,52 @@ def run(context):
         design = app.activeProduct
         rootComp = design.rootComponent
         comp = design.activeComponent
+        features = rootComp.features
 
-        mx = None
-        for occ in comp.allOccurrences:
-            if occ.component.name == 'MX Series-Cherry Key v1':
-                mx = occ.component
-                break
+        switch_collection = adsk.core.ObjectCollection.create()
+        mx_switch_occ = import_switch_model(app).item(0)
+        switch_collection.add(mx_switch_occ)
 
-        with open(pathlib.Path(__file__).parent / './keyboard-layout.json', 'r') as fp:
-            keys = deserialize(json.load(fp))
+        min_bb = mx_switch_occ.boundingBox.minPoint
+        max_bb = mx_switch_occ.boundingBox.maxPoint
+        mid_point = adsk.core.Point3D.create(
+            (min_bb.x + max_bb.x) / 2,
+            (min_bb.x + max_bb.x) / 2,
+            (min_bb.x + max_bb.x) / 2
+        )
+        rot_axis = adsk.core.InfiniteLine3D.create(
+            mid_point,
+            adsk.core.Vector3D.create(0, 0, 1)
+        )
+        trans = adsk.core.Matrix3D.create()
+
+        rotX = adsk.core.Matrix3D.create()
+        rotX.setToRotation(
+            math.pi/2,
+            adsk.core.Vector3D.create(
+                1, 0, 0
+            ),
+            adsk.core.Point3D.create(0, 0, 0)
+        )
+        trans.transformBy(rotX)
+
+        rotY = adsk.core.Matrix3D.create()
+        rotY.setToRotation(math.pi/2, adsk.core.Vector3D.create(0,
+                                                                1, 0), adsk.core.Point3D.create(0, 0, 0))
+        trans.transformBy(rotY)
+
+        moveInput = rootComp.features.moveFeatures.createInput(
+            switch_collection, trans)
+        ui.messageBox('count:\n{}'.format(moveInput.objectType))
+        rootComp.features.moveFeatures.add(moveInput)
+
+        # ui.messageBox('count:\n{}'.format(occ.objectType))
+        return
+        try:
+            with open(prompt_KLE_file_select(ui), 'r') as fp:
+                keys = deserialize(json.load(fp))
+        except FileNotFoundError:
+            return
 
         keys = [offset_key(key) for key in keys]
         keys = [rotate_key(key) for key in keys]
@@ -147,8 +185,55 @@ def run(context):
             y = -key['y']
             ng = -key['rotation_angle'] + 90
             # xpos += size
-            add_switch(rootComp, occ, mx, x, -y, ng, ui)
+            add_switch(rootComp, mx_switch_occ, x, y, ng)
 
+    except:
+        if ui:
+            ui.messageBox('Failed:\n{}'.format(traceback.format_exc()))
+
+
+def prompt_KLE_file_select(ui):
+    # Set styles of file dialog.
+    fileDlg = ui.createFileDialog()
+    fileDlg.isMultiSelectEnabled = False
+    fileDlg.title = 'Select a JSON-serialized KLE file'
+    fileDlg.filter = '*.json'
+
+    # Show file open dialog
+    dlgResult = fileDlg.showOpen()
+    if dlgResult == adsk.core.DialogResults.DialogOK:
+        return fileDlg.filename
+    else:
+        raise FileNotFoundError
+
+
+def prompt_switch_file_select(ui):
+    # Set styles of file dialog.
+    fileDlg = ui.createFileDialog()
+    fileDlg.isMultiSelectEnabled = False
+    fileDlg.title = 'Select a switch STEP file'
+    fileDlg.filter = '*.STEP'
+
+    # Show file open dialog
+    dlgResult = fileDlg.showOpen()
+    if dlgResult == adsk.core.DialogResults.DialogOK:
+        return fileDlg.filename
+    else:
+        raise FileNotFoundError
+
+
+def import_switch_model(app):
+    ui = app.userInterface
+    design = app.activeProduct
+    rootComp = design.rootComponent
+    try:
+
+        # Import a selected STEP file into the root component
+        stepImportOptions = app.importManager.createSTEPImportOptions(
+            prompt_switch_file_select(ui)
+        )
+        # this version of the method returns the imported model ref
+        return app.importManager.importToTarget2(stepImportOptions, rootComp)
     except:
         if ui:
             ui.messageBox('Failed:\n{}'.format(traceback.format_exc()))

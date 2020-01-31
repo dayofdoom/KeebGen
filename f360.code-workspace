@@ -1,14 +1,17 @@
 {
-	"folders": [
-		{
-			"path": "."
-		},
-		{
-			"path": "C:\\Users\\Francis\\AppData\\Roaming\\Autodesk\\Autodesk Fusion 360\\API\\Scripts"
-		},
-		{
-			"path": "C:\\dev\\py-kle-serial"
-		}
-	],
-	"settings": {}
+  "folders": [
+    {
+      "path": "."
+    },
+    {
+      "path": "C:\\Users\\Francis\\AppData\\Roaming\\Autodesk\\Autodesk Fusion 360\\API\\Scripts"
+    },
+    {
+      "path": "C:\\Users\\fusher\\AppData\\Roaming\\Autodesk\\Autodesk Fusion 360\\API\\Scripts"
+    },
+    {
+      "path": "C:\\dev\\py-kle-serial"
+    }
+  ],
+  "settings": {}
 }

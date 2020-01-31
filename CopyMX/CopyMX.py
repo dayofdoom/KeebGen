@@ -144,6 +144,7 @@ def run(context):
             mid_point,
             adsk.core.Vector3D.create(0, 0, 1)
         )
+# try it this way: http://help.autodesk.com/view/fusion360/ENU/?caas=caas/discussion/t5/Fusion-360-API-and-Scripts/Is-it-possible-to-Rotate-a-body-by-multiple-angles-as-you-can-do-in-the-Move-UI/td-p/6234792.html
         trans = adsk.core.Matrix3D.create()
 
         rotX = adsk.core.Matrix3D.create()

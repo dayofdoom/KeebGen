@@ -3,7 +3,6 @@
 
 import adsk.core  # pylint: disable=import-error
 import traceback
-import re
 import json
 import pathlib
 import math
@@ -19,57 +18,50 @@ class dotdict(dict):
 def deserialize(rows):
     # Initialize with defaults
     current = dotdict(dict(
-        x=0, y=0, x2=0, y2=0,                         # position
-        width=1, height=1, width2=1, height2=1,       # size
+        x=0, y=0, width=1, height=1,                   # position, size
         rotation_angle=0, rotation_x=0, rotation_y=0,  # rotation
     ))
     keys = []
     cluster = dotdict(dict(x=0, y=0))
-    for (r, row) in enumerate(rows):
+    for r, row in enumerate(rows):
         if isinstance(row, list):
-            for k, key in enumerate(row):
-                if isinstance(key, str):
-                    newKey = dotdict(current.copy())
-                    newKey.width2 = current.width if newKey.width2 == 0 else current.width2
-                    newKey.height2 = current.height if newKey.height2 == 0 else current.height2
-                    # Add the key!
-                    keys.append(newKey)
-
-                    # Set up for the next key
-                    current.x += current.width
-                    current.width = current.height = 1
-                    current.x2 = current.y2 = current.width2 = current.height2 = 0
-
+            for i, item in enumerate(row):
+                if isinstance(item, str):
+                    # Copy-construct the accumulated key
+                    keys.append(dotdict(current.copy()))
+                    # Set up for the next item
+                    reset_current(current)
                 else:
-                    key = dotdict(key)
-                    if key.r:
-                        current.rotation_angle = key.r
-                    if key.rx:
-                        current.rotation_x = cluster.x = key.rx
-                        current.update(cluster)
-                    if key.ry:
-                        current.rotation_y = cluster.y = key.ry
-                        current.update(cluster)
-                    if key.x:
-                        current.x += key.x
-                    if key.y:
-                        current.y += key.y
-                    if key.w:
-                        current.width = current.width2 = key.w
-                    if key.h:
-                        current.height = current.height2 = key.h
-                    if key.x2:
-                        current.x2 = key.x2
-                    if key.y2:
-                        current.y2 = key.y2
-                    if key.w2:
-                        current.width2 = key.w2
-                    if key.h2:
-                        current.height2 = key.h2
+                    update_current_by_meta(current, dotdict(item), cluster)
             # End of the row
             current.y += 1
         current.x = current.rotation_x
     return keys
+
+
+def reset_current(current):
+    current.x += current.width
+    current.width = current.height = 1
+
+
+def update_current_by_meta(current, meta, cluster):
+    # Update rotation info
+    if meta.r:
+        current.rotation_angle = meta.r
+    if meta.rx:
+        current.rotation_x = cluster.x = meta.rx
+        current.update(cluster)
+    if meta.ry:
+        current.rotation_y = cluster.y = meta.ry
+        current.update(cluster)
+    # Increment next position values
+    current.x += meta.get('x', 0)
+    current.y += meta.get('y', 0)
+    # Store next dimensions
+    if meta.w:
+        current.width = meta.w
+    if meta.h:
+        current.height = meta.h
 
 
 def offset_key(key):

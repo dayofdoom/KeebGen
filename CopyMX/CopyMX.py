@@ -137,12 +137,12 @@ def run(context):
         comp = design.activeComponent
         features = rootComp.features
 
-        #switch_collection = adsk.core.ObjectCollection.create()
+        switch_collection = adsk.core.ObjectCollection.create()
         mx_switch_occ = import_switch_model(app).item(0)
         swocc_transf = mx_switch_occ.transform
-
-        # switch_collection.add(mx_switch_occ)
-
+        switch_collection.add(mx_switch_occ.bRepBodies)
+        ui.messageBox('collection:\n{}'.format(switch_collection.objectType))
+        return
         min_bb = mx_switch_occ.boundingBox.minPoint
         max_bb = mx_switch_occ.boundingBox.maxPoint
         mid_point = adsk.core.Point3D.create(
@@ -219,12 +219,12 @@ def run(context):
             ui.messageBox('Failed:\n{}'.format(traceback.format_exc()))
 
 
-def prompt_KLE_file_select(ui):
+def prompt_file_select(ui, title, filter):
     # Set styles of file dialog.
     fileDlg = ui.createFileDialog()
     fileDlg.isMultiSelectEnabled = False
-    fileDlg.title = 'Select a JSON-serialized KLE file'
-    fileDlg.filter = '*.json'
+    fileDlg.title = title
+    fileDlg.filter = filter
 
     # Show file open dialog
     dlgResult = fileDlg.showOpen()
@@ -232,21 +232,14 @@ def prompt_KLE_file_select(ui):
         return fileDlg.filename
     else:
         raise FileNotFoundError
+
+
+def prompt_KLE_file_select(ui):
+    prompt_file_select(ui, 'Select a JSON-serialized KLE file', '*.json')
 
 
 def prompt_switch_file_select(ui):
-    # Set styles of file dialog.
-    fileDlg = ui.createFileDialog()
-    fileDlg.isMultiSelectEnabled = False
-    fileDlg.title = 'Select a switch STEP file'
-    fileDlg.filter = '*.STEP'
-
-    # Show file open dialog
-    dlgResult = fileDlg.showOpen()
-    if dlgResult == adsk.core.DialogResults.DialogOK:
-        return fileDlg.filename
-    else:
-        raise FileNotFoundError
+    prompt_file_select(ui, 'Select a switch STEP file', '*.STEP')
 
 
 def import_switch_model(app):

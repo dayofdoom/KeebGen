@@ -14,6 +14,48 @@ PLATE_THICKNESS = 0.3
 BEZEL_THICKNESS = 0.6
 
 
+def cross(u, v):
+    # Compute cross-product of two vectors
+    return adsk.core.Vector3D.create(
+        u.y * v.z - u.z * v.y,
+        u.z * v.x - u.x * v.z,
+        u.x * v.y - u.y * v.x
+    )
+
+
+def split(u, v, points):
+    # return points on left side of UV
+    return [p for p in points if cross_mag(p, u, v) < 0]
+
+
+def cross_mag(p, u, v):
+    pc = p.asVector().copy()
+    pc.subtract(u)
+    vc = v.copy()
+    vc.subtract(u)
+    return cross(pc, vc).z
+
+
+def extend(u, v, points):
+    if not points:
+        return []
+
+    # find furthest point W, and split search to WV, UW
+    w = min(points, key=lambda p: cross_mag(p, u, v))
+    p1, p2 = split(w, v, points), split(u, w, points)
+    return extend(w.asVector(), v, p1) + [w] + extend(u, w.asVector(), p2)
+
+
+def convex_hull(points):
+    # find two hull points, U, V, and split to left and right search
+    u = min(points, key=lambda p: p.x).asVector()
+    v = max(points, key=lambda p: p.x).asVector()
+    left, right = split(u, v, points), split(v, u, points)
+
+    # find convex hull on each side
+    return [v] + extend(u, v, left) + [u] + extend(v, u, right) + [v]
+
+
 def cut_switch_cutouts(plate_body, keys):
     app = adsk.core.Application.get()
     product = app.activeProduct
@@ -130,6 +172,7 @@ def cut_bezel_cutouts(bezel_body, keys):
         adsk.core.ValueInput.createByString("9.00mm"))
     extrudeInput.startExtent = start_offset
     extrudes.add(extrudeInput)
+    return [sketchCutout.sketchPoints.item(i).geometry for i in range(sketchCutout.sketchPoints.count)]
 
 
 def extrude_plate(bx0, bx1, by0, by1):
@@ -278,8 +321,7 @@ def run(context):
 
         keys = [offset_key(key) for key in keys]
         keys = [scale_key(KEY_UNIT, key) for key in keys]
-        # keys = [rotate_key_center(key) for key in keys]
-        # switch_bounds, cap_bounds = zip(*calc_bounds(key) for key in keys)
+
         bx0 = min(key["x"] for key in keys) - 1
         bx1 = max(key["x"] for key in keys) + 1
         by0 = min(key["y"] for key in keys) - 1
@@ -290,7 +332,8 @@ def run(context):
         bezel_body = extrude_bezel(
             plate_body, bx0 - 2, bx1 + 2, by0 - 2, by1 + 2)
         cut_switch_cutouts(plate_body, keys)
-        cut_bezel_cutouts(bezel_body, keys)
+        bezel_points = cut_bezel_cutouts(bezel_body, keys)
+        # hull_points = convex_hull(bezel_points)
         # for key in keys:
         #     x = key['x']
         #     y = key['y']
@@ -309,31 +352,6 @@ def offset_key(key):
     new_key = key.copy()
     new_key['x'] = new_key['x'] + new_key['width'] / 2
     new_key['y'] = new_key['y'] + new_key['height'] / 2
-    return new_key
-
-
-def rotate(origin, point, angle):
-    """
-    Rotate a point counterclockwise by a given angle around a given origin.
-
-    The angle should be given in radians.
-    """
-    # angle = angle if angle == 0 else 180-angle
-    ox, oy = origin
-    px, py = point
-
-    qx = ox + math.cos(angle) * (px - ox) - math.sin(angle) * (py - oy)
-    qy = oy + math.sin(angle) * (px - ox) + math.cos(angle) * (py - oy)
-    return qx, qy
-
-
-def rotate_key_center(key):
-    dx, dy = rotate((key['rotation_x'], key['rotation_y']),
-                    (key['x'], key['y']), math.radians(key['rotation_angle']))
-    new_key = key.copy()
-    new_key['x'] = dx
-    new_key['y'] = dy
-    new_key['rotation_angle'] = key['rotation_angle']
     return new_key
 
 

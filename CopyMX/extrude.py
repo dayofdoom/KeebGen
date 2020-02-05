@@ -4,47 +4,64 @@ import traceback
 import math
 import json
 
-# def cut_switch_cutouts(plate_body, sketch, keys):
-#     sketchCutout = sketches.add(rootComp.xYConstructionPlane)
+# Standard MX switch is 1.905 cm from center to center
+KEY_UNIT = 1.905
+# and 1.4 cm plate cutout
+SWITCH_RADIUS = 1.4
+# 3mm plate
+PLATE_THICKNESS = 0.3
+# 6mm bezel
+BEZEL_THICKNESS = 0.6
 
 
-def cut_switch_cutout(plate_body, x, y, radians):
+def cut_switch_cutouts(plate_body, keys):
     app = adsk.core.Application.get()
     product = app.activeProduct
     design = adsk.fusion.Design.cast(product)
+    ui = adsk.core.Application.get().userInterface
 
     # Get the root component of the active design
     rootComp = design.rootComponent
     extrudes = rootComp.features.extrudeFeatures
     sketches = rootComp.sketches
-    # Create another sketch
     sketchCutout = sketches.add(rootComp.xYConstructionPlane)
     sketchLinesCutout = sketchCutout.sketchCurves.sketchLines
-    centerPointCutout = adsk.core.Point3D.create(x, y, 0)
-    cornerPointCutout = adsk.core.Point3D.create(x + 0.7, y + 0.7, 0)
-    sketchLinesCutout.addCenterPointRectangle(centerPointCutout,
-                                              cornerPointCutout)
-    sketchParts = adsk.core.ObjectCollection.create()
-    for c in sketchCutout.sketchCurves:
-        sketchParts.add(c)
-    for p in sketchCutout.sketchPoints:
-        sketchParts.add(p)
-    ogTransform = sketchCutout.transform
-    rotZ = adsk.core.Matrix3D.create()
-    rotZ.setToRotation(
-        radians,
-        adsk.core.Vector3D.create(
-            0, 0, 1
-        ),
-        centerPointCutout
-    )
-    ogTransform.transformBy(rotZ)
-    sketchCutout.move(sketchParts, ogTransform)
-    # Get the profile defined by the vertical circle
-    profCutout = sketchCutout.profiles.item(0)
+    for key in keys:
+        x = key['x']
+        y = key['y']
+        ng = math.radians(key['rotation_angle'])
+        # ui.messageBox('angle degrees:{}\nangle radians{}'.format(
+        #     key['rotation_angle'], ng))
+        centerPointCutout = adsk.core.Point3D.create(x, y, 0)
+        cornerPointCutout = adsk.core.Point3D.create(
+            x + SWITCH_RADIUS/2, y + SWITCH_RADIUS/2, 0)
+        rect = sketchLinesCutout.addCenterPointRectangle(centerPointCutout,
+                                                         cornerPointCutout)
+        centerPointRotation = adsk.core.Point3D.create(
+            key["rotation_x"], key["rotation_y"], 0)
+        sketchParts = adsk.core.ObjectCollection.create()
+        for c in rect:
+            sketchParts.add(c)
+        # for p in sketchCutout.sketchPoints:
+        #     sketchParts.add(p)
+        ogTransform = sketchCutout.transform.copy()
+        rotZ = adsk.core.Matrix3D.create()
+        rotZ.setToRotation(
+            ng,
+            adsk.core.Vector3D.create(
+                0, 0, 1
+            ),
+            centerPointRotation
+        )
+        ogTransform.transformBy(rotZ)
+        sketchCutout.move(sketchParts, ogTransform)
+    profCutout = sketchCutout.profiles
+    profCollection = adsk.core.ObjectCollection.create()
+    for i in range(profCutout.count):
+        profCollection.add(profCutout.item(i))
     # Extrude Sample 7: Create a 2-side extrusion, whose 1st side is 100 mm distance extent, and 2nd side is 10 mm distance extent.
     extrudeInput = extrudes.createInput(
-        profCutout, adsk.fusion.FeatureOperations.CutFeatureOperation)
+        profCollection, adsk.fusion.FeatureOperations.CutFeatureOperation)
     isChained = True
     extent_toentity = adsk.fusion.ToEntityExtentDefinition.create(
         plate_body, isChained)
@@ -54,50 +71,64 @@ def cut_switch_cutout(plate_body, x, y, radians):
     extrudes.add(extrudeInput)
 
 
-def cut_key_bezel(bezel_body, x, y, height, width, radians):
+def cut_bezel_cutouts(bezel_body, keys):
     app = adsk.core.Application.get()
     product = app.activeProduct
     design = adsk.fusion.Design.cast(product)
+    ui = adsk.core.Application.get().userInterface
 
     # Get the root component of the active design
     rootComp = design.rootComponent
     extrudes = rootComp.features.extrudeFeatures
     sketches = rootComp.sketches
-    # Create another sketch
     sketchCutout = sketches.add(rootComp.xYConstructionPlane)
     sketchLinesCutout = sketchCutout.sketchCurves.sketchLines
-    centerPointCutout = adsk.core.Point3D.create(x, y, 0)
-    cornerPointCutout = adsk.core.Point3D.create(
-        (x + 0.9525) * width, (y + 0.9525) * height, 0)
-    sketchLinesCutout.addCenterPointRectangle(centerPointCutout,
-                                              cornerPointCutout)
-    sketchParts = adsk.core.ObjectCollection.create()
-    for c in sketchCutout.sketchCurves:
-        sketchParts.add(c)
-    for p in sketchCutout.sketchPoints:
-        sketchParts.add(p)
-    ogTransform = sketchCutout.transform
-    rotZ = adsk.core.Matrix3D.create()
-    rotZ.setToRotation(
-        radians,
-        adsk.core.Vector3D.create(
-            0, 0, 1
-        ),
-        centerPointCutout
-    )
-    ogTransform.transformBy(rotZ)
-    sketchCutout.move(sketchParts, ogTransform)
-    # Get the profile defined by the vertical circle
-    profCutout = sketchCutout.profiles.item(0)
+    for key in keys:
+        x = key['x']
+        y = key['y']
+        ng = math.radians(key['rotation_angle'])
+        # ui.messageBox('angle degrees:{}\nangle radians{}'.format(
+        #     key['rotation_angle'], ng))
+        centerPointCutout = adsk.core.Point3D.create(x, y, 0)
+        cornerPointCutout = adsk.core.Point3D.create(
+            x + key['width']/2, y + key['height']/2, 0)
+        rect = sketchLinesCutout.addCenterPointRectangle(centerPointCutout,
+                                                         cornerPointCutout)
+        centerPointRotation = adsk.core.Point3D.create(
+            key["rotation_x"], key["rotation_y"], 0)
+        sketchParts = adsk.core.ObjectCollection.create()
+        for c in rect:
+            sketchParts.add(c)
+        # for p in sketchCutout.sketchPoints:
+        #     sketchParts.add(p)
+        ogTransform = sketchCutout.transform.copy()
+        rotZ = adsk.core.Matrix3D.create()
+        rotZ.setToRotation(
+            ng,
+            adsk.core.Vector3D.create(
+                0, 0, 1
+            ),
+            centerPointRotation
+        )
+        ogTransform.transformBy(rotZ)
+        sketchCutout.move(sketchParts, ogTransform)
+    profCutout = sketchCutout.profiles
+    profCollection = adsk.core.ObjectCollection.create()
+    for i in range(profCutout.count):
+        profCollection.add(profCutout.item(i))
     # Extrude Sample 7: Create a 2-side extrusion, whose 1st side is 100 mm distance extent, and 2nd side is 10 mm distance extent.
     extrudeInput = extrudes.createInput(
-        profCutout, adsk.fusion.FeatureOperations.CutFeatureOperation)
+        profCollection, adsk.fusion.FeatureOperations.CutFeatureOperation)
+
     isChained = True
     extent_toentity = adsk.fusion.ToEntityExtentDefinition.create(
         bezel_body, isChained)
     extent_toentity.isMinimumSolution = False
     extrudeInput.setOneSideExtent(
-        extent_toentity, adsk.fusion.ExtentDirections.PositiveExtentDirection)
+        extent_toentity, adsk.fusion.ExtentDirections.NegativeExtentDirection)
+    start_offset = adsk.fusion.OffsetStartDefinition.create(
+        adsk.core.ValueInput.createByString("9.00mm"))
+    extrudeInput.startExtent = start_offset
     extrudes.add(extrudeInput)
 
 
@@ -123,12 +154,16 @@ def extrude_plate(bx0, bx1, by0, by1):
 
     # Get the profile defined by the recangle
     prof = sketch.profiles.item(0)
-
-    # Extrude Sample 1: A simple way of creating typical extrusions (extrusion that goes from the profile plane the specified distance).
-    # Define a distance extent of 3 mm
-    distance = adsk.core.ValueInput.createByReal(0.3)
-    extrude1 = extrudes.addSimple(
-        prof, distance, adsk.fusion.FeatureOperations.NewBodyFeatureOperation)
+    extrudeInput = extrudes.createInput(
+        prof, adsk.fusion.FeatureOperations.NewBodyFeatureOperation)
+    start_offset = adsk.fusion.OffsetStartDefinition.create(
+        adsk.core.ValueInput.createByReal(0))
+    extrudeInput.startExtent = start_offset
+    thickness = adsk.core.ValueInput.createByReal(PLATE_THICKNESS)
+    extent_thickness = adsk.fusion.DistanceExtentDefinition.create(thickness)
+    extrudeInput.setOneSideExtent(
+        extent_thickness, adsk.fusion.ExtentDirections.PositiveExtentDirection)
+    extrude1 = extrudes.add(extrudeInput)
     # Get the extrusion body
     plate_body = extrude1.bodies.item(0)
     plate_body.name = "plate_outline"
@@ -159,25 +194,41 @@ def extrude_bezel(plate_body, bx0, bx1, by0, by1):
     prof = sketch.profiles.item(0)
     extrudeInput = extrudes.createInput(
         prof, adsk.fusion.FeatureOperations.NewBodyFeatureOperation)
-    isChained = False
     # ui = adsk.core.Application.get().userInterface
     # ui.messageBox('Faces:\n{}'.format(plate_body.faces.count))
-    extent_toentity = adsk.fusion.ToEntityExtentDefinition.create(
-        plate_body.faces.item(5), isChained)
-    extent_toentity.isMinimumSolution = True
-    extrudeInput.setOneSideExtent(
-        extent_toentity, adsk.fusion.ExtentDirections.NegativeExtentDirection)
+    # extent_toentity = adsk.fusion.ToEntityExtentDefinition.create(
+    #     plate_body.faces.item(5), isChained)
+    # extent_toentity.isMinimumSolution = True
+
     # Extrude Sample 1: A simple way of creating typical extrusions (extrusion that goes from the profile plane the specified distance).
     # Define a distance extent of 6 mm
+    thickness = adsk.core.ValueInput.createByReal(BEZEL_THICKNESS)
+    extent_thickness = adsk.fusion.DistanceExtentDefinition.create(thickness)
+    extrudeInput.setOneSideExtent(
+        extent_thickness, adsk.fusion.ExtentDirections.PositiveExtentDirection)
     start_offset = adsk.fusion.OffsetStartDefinition.create(
-        adsk.core.ValueInput.createByString("-6.00mm"))
+        adsk.core.ValueInput.createByReal(PLATE_THICKNESS))
     extrudeInput.startExtent = start_offset
-
     extrude1 = extrudes.add(extrudeInput)
     # Get the extrusion body
     bezel_body = extrude1.bodies.item(0)
     bezel_body.name = "bezel_outline"
     return bezel_body
+
+
+# def sketch_bezel(keys):
+
+
+def scale_key(scale, key):
+    key = key.copy()
+    key["x"] = scale * key["x"]
+    key["y"] = -scale * key["y"]
+    key["width"] = scale * key["width"]
+    key["height"] = scale * key["height"]
+    key['rotation_x'] = scale * key["rotation_x"]
+    key['rotation_y'] = -scale * key["rotation_y"]
+    key['rotation_angle'] = -key["rotation_angle"]
+    return key
 
 
 def file_select(title, filter):
@@ -226,25 +277,28 @@ def run(context):
             return
 
         keys = [offset_key(key) for key in keys]
-        keys = [rotate_key_position(key) for key in keys]
-        bx0 = min(key["x"] for key in keys) * 1.905 - 1
-        bx1 = max(key["x"] for key in keys) * 1.905 + 1
-        by0 = min(-key["y"] for key in keys) * 1.905 - 1
-        by1 = max(-key["y"] for key in keys) * 1.905 + 1
+        keys = [scale_key(KEY_UNIT, key) for key in keys]
+        # keys = [rotate_key_center(key) for key in keys]
+        # switch_bounds, cap_bounds = zip(*calc_bounds(key) for key in keys)
+        bx0 = min(key["x"] for key in keys) - 1
+        bx1 = max(key["x"] for key in keys) + 1
+        by0 = min(key["y"] for key in keys) - 1
+        by1 = max(key["y"] for key in keys) + 1
         # ui.messageBox('{}, {}; {}, {}'.format(bx0, by0, bx1, by1))
 
         plate_body = extrude_plate(bx0 - 2, bx1 + 2, by0 - 2, by1 + 2)
         bezel_body = extrude_bezel(
             plate_body, bx0 - 2, bx1 + 2, by0 - 2, by1 + 2)
-        for key in keys:
-            x = key['x'] * 1.905
-            y = -key['y'] * 1.905
-            ng = math.radians(-key['rotation_angle'])
-            # xpos += size
-            # ui.messageBox('{}, {}; {}, {}\n{}, {}'.format(
-            #     bx0, by0, bx1, by1, x, y))
-            cut_switch_cutout(plate_body, x, y, ng)
-            cut_key_bezel(bezel_body, x, y, key['width'], key['height'], ng)
+        cut_switch_cutouts(plate_body, keys)
+        cut_bezel_cutouts(bezel_body, keys)
+        # for key in keys:
+        #     x = key['x']
+        #     y = key['y']
+        #     ng = math.radians(key['rotation_angle'])
+        #     # xpos += size
+        #     # ui.messageBox('{}, {}; {}, {}\n{}, {}'.format(
+        #     #     bx0, by0, bx1, by1, x, y))
+        #     cut_key_bezel(bezel_body, x, y, key['width'], key['height'], ng)
 
     except:
         if ui:
@@ -273,7 +327,7 @@ def rotate(origin, point, angle):
     return qx, qy
 
 
-def rotate_key_position(key):
+def rotate_key_center(key):
     dx, dy = rotate((key['rotation_x'], key['rotation_y']),
                     (key['x'], key['y']), math.radians(key['rotation_angle']))
     new_key = key.copy()

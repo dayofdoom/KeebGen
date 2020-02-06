@@ -217,7 +217,7 @@ def extrude_plate(bx0, bx1, by0, by1):
     extrudeInput = extrudes.createInput(
         prof, adsk.fusion.FeatureOperations.NewBodyFeatureOperation)
     start_offset = adsk.fusion.OffsetStartDefinition.create(
-        adsk.core.ValueInput.createByReal(0))
+    )
     extrudeInput.startExtent = start_offset
     thickness = adsk.core.ValueInput.createByReal(PLATE_THICKNESS)
     extent_thickness = adsk.fusion.DistanceExtentDefinition.create(thickness)
@@ -230,7 +230,7 @@ def extrude_plate(bx0, bx1, by0, by1):
     return plate_body
 
 
-def extrude_larger_body(single_profile_sketch):
+def extrude_larger_body(single_profile_sketch, extra, thickness, offset, direction, already_offset=False):
     app = adsk.core.Application.get()
 
     product = app.activeProduct
@@ -241,9 +241,22 @@ def extrude_larger_body(single_profile_sketch):
 
     # Get extrude features
     extrudes = rootComp.features.extrudeFeatures
-    prof = single_profile_sketch.profiles.item(0)
+    innerCurves = adsk.core.ObjectCollection.create()
+    single_profile_sketch.sketchCurves
+    curves = single_profile_sketch.sketchCurves
+    for i in range(curves.count):
+        innerCurves.add(curves.item(i))
+    # assume a point in the negative xy quadrant is outside
+    outside_point = adsk.core.Point3D.create(-1, -1, 0)
+    if not already_offset:
+        offsetCurves = single_profile_sketch.offset(
+            innerCurves, outside_point, extra)
+    profs = single_profile_sketch.profiles
+    profCollection = adsk.core.ObjectCollection.create()
+    for i in range(profs.count):
+        profCollection.add(profs.item(i))
     extrudeInput = extrudes.createInput(
-        prof, adsk.fusion.FeatureOperations.NewBodyFeatureOperation)
+        profCollection, adsk.fusion.FeatureOperations.NewBodyFeatureOperation)
     # ui = adsk.core.Application.get().userInterface
     # ui.messageBox('Faces:\n{}'.format(plate_body.faces.count))
     # extent_toentity = adsk.fusion.ToEntityExtentDefinition.create(
@@ -252,12 +265,11 @@ def extrude_larger_body(single_profile_sketch):
 
     # Extrude Sample 1: A simple way of creating typical extrusions (extrusion that goes from the profile plane the specified distance).
     # Define a distance extent of 6 mm
-    thickness = adsk.core.ValueInput.createByReal(BEZEL_THICKNESS)
     extent_thickness = adsk.fusion.DistanceExtentDefinition.create(thickness)
     extrudeInput.setOneSideExtent(
-        extent_thickness, adsk.fusion.ExtentDirections.PositiveExtentDirection)
-    start_offset = adsk.fusion.OffsetStartDefinition.create(
-        adsk.core.ValueInput.createByReal(PLATE_THICKNESS))
+        extent_thickness, direction)
+    start_offset = adsk.fusion.OffsetStartDefinition.create(offset
+                                                            )
     extrudeInput.startExtent = start_offset
     extrude1 = extrudes.add(extrudeInput)
     # Get the extrusion body
@@ -398,15 +410,26 @@ def run(context):
         by1 = max(key["y"] for key in keys) + 1
         # ui.messageBox('{}, {}; {}, {}'.format(bx0, by0, bx1, by1))
 
-        plate_body = extrude_plate(bx0 - 2, bx1 + 2, by0 - 2, by1 + 2)
-        cut_switch_cutouts(plate_body, keys)
         bezel_sketch = sketch_bezel_cutout(keys)
         # Start indexing at 1 because the first point is just the origin
         bezel_points = [bezel_sketch.sketchPoints.item(i).geometry
                         for i in range(1, bezel_sketch.sketchPoints.count)]
         bezel_hull_points = convex_hull(bezel_points)
         bezel_hull_sketch = sketch_bezel_hull(bezel_hull_points)
-        bezel_body = extrude_larger_body(bezel_hull_sketch)
+        #bezel_body = extrude_larger_body(bezel_hull_sketch)
+        bezel_body = extrude_larger_body(
+            bezel_hull_sketch, 1,
+            adsk.core.ValueInput.createByReal(BEZEL_THICKNESS),
+            adsk.core.ValueInput.createByReal(PLATE_THICKNESS),
+            adsk.fusion.ExtentDirections.PositiveExtentDirection)
+        plate_body = extrude_larger_body(
+            bezel_hull_sketch, 1,
+            adsk.core.ValueInput.createByReal(PLATE_THICKNESS),
+            adsk.core.ValueInput.createByReal(0),
+            adsk.fusion.ExtentDirections.PositiveExtentDirection,
+            already_offset=True
+        )
+        cut_switch_cutouts(plate_body, keys)
         bezel_cutout = cut_bezel_cutouts(bezel_body, bezel_sketch)
         # ui.messageBox('{}'.format(
         #     any(h.x == h.y == h.z == 0 for h in bezel_points)))

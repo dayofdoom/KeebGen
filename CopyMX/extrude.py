@@ -29,10 +29,19 @@ def split(u, v, points):
 
 
 def cross_mag(p, u, v):
-    pc = p.asVector().copy()
-    pc.subtract(u)
-    vc = v.copy()
-    vc.subtract(u)
+    ui = adsk.core.Application.get().userInterface
+    uc = adsk.core.Vector3D.create(u.x, u.y, u.z)
+    pc = adsk.core.Vector3D.create(p.x, p.y, p.z)
+    vc = adsk.core.Vector3D.create(v.x, v.y, v.z)
+    try:
+        pc.subtract(uc)
+        vc.subtract(uc)
+    except TypeError as err:
+        ui.messageBox('pc:{}\nu:{}'.format(pc, uc))
+        raise TypeError
+    except AttributeError as err:
+        ui.messageBox('pc:{}\nu:{}'.format(pc, uc))
+        raise AttributeError
     return cross(pc, vc).z
 
 
@@ -113,7 +122,34 @@ def cut_switch_cutouts(plate_body, keys):
     extrudes.add(extrudeInput)
 
 
-def cut_bezel_cutouts(bezel_body, keys):
+def cut_bezel_cutouts(bezel_body, sketchCutout):
+    app = adsk.core.Application.get()
+    product = app.activeProduct
+    design = adsk.fusion.Design.cast(product)
+    # Get the root component of the active design
+    rootComp = design.rootComponent
+    extrudes = rootComp.features.extrudeFeatures
+    profCutout = sketchCutout.profiles
+    profCollection = adsk.core.ObjectCollection.create()
+    for i in range(profCutout.count):
+        profCollection.add(profCutout.item(i))
+    # Extrude Sample 7: Create a 2-side extrusion, whose 1st side is 100 mm distance extent, and 2nd side is 10 mm distance extent.
+    extrudeInput = extrudes.createInput(
+        profCollection, adsk.fusion.FeatureOperations.CutFeatureOperation)
+
+    isChained = True
+    extent_toentity = adsk.fusion.ToEntityExtentDefinition.create(
+        bezel_body, isChained)
+    extent_toentity.isMinimumSolution = False
+    extrudeInput.setOneSideExtent(
+        extent_toentity, adsk.fusion.ExtentDirections.NegativeExtentDirection)
+    start_offset = adsk.fusion.OffsetStartDefinition.create(
+        adsk.core.ValueInput.createByString("9.00mm"))
+    extrudeInput.startExtent = start_offset
+    return extrudes.add(extrudeInput)
+
+
+def sketch_bezel_cutout(keys):
     app = adsk.core.Application.get()
     product = app.activeProduct
     design = adsk.fusion.Design.cast(product)
@@ -121,7 +157,6 @@ def cut_bezel_cutouts(bezel_body, keys):
 
     # Get the root component of the active design
     rootComp = design.rootComponent
-    extrudes = rootComp.features.extrudeFeatures
     sketches = rootComp.sketches
     sketchCutout = sketches.add(rootComp.xYConstructionPlane)
     sketchLinesCutout = sketchCutout.sketchCurves.sketchLines
@@ -154,25 +189,7 @@ def cut_bezel_cutouts(bezel_body, keys):
         )
         ogTransform.transformBy(rotZ)
         sketchCutout.move(sketchParts, ogTransform)
-    profCutout = sketchCutout.profiles
-    profCollection = adsk.core.ObjectCollection.create()
-    for i in range(profCutout.count):
-        profCollection.add(profCutout.item(i))
-    # Extrude Sample 7: Create a 2-side extrusion, whose 1st side is 100 mm distance extent, and 2nd side is 10 mm distance extent.
-    extrudeInput = extrudes.createInput(
-        profCollection, adsk.fusion.FeatureOperations.CutFeatureOperation)
-
-    isChained = True
-    extent_toentity = adsk.fusion.ToEntityExtentDefinition.create(
-        bezel_body, isChained)
-    extent_toentity.isMinimumSolution = False
-    extrudeInput.setOneSideExtent(
-        extent_toentity, adsk.fusion.ExtentDirections.NegativeExtentDirection)
-    start_offset = adsk.fusion.OffsetStartDefinition.create(
-        adsk.core.ValueInput.createByString("9.00mm"))
-    extrudeInput.startExtent = start_offset
-    extrudes.add(extrudeInput)
-    return [sketchCutout.sketchPoints.item(i).geometry for i in range(sketchCutout.sketchPoints.count)]
+    return sketchCutout
 
 
 def extrude_plate(bx0, bx1, by0, by1):
@@ -211,6 +228,43 @@ def extrude_plate(bx0, bx1, by0, by1):
     plate_body = extrude1.bodies.item(0)
     plate_body.name = "plate_outline"
     return plate_body
+
+
+def extrude_larger_body(single_profile_sketch):
+    app = adsk.core.Application.get()
+
+    product = app.activeProduct
+    design = adsk.fusion.Design.cast(product)
+
+    # Get the root component of the active design
+    rootComp = design.rootComponent
+
+    # Get extrude features
+    extrudes = rootComp.features.extrudeFeatures
+    prof = single_profile_sketch.profiles.item(0)
+    extrudeInput = extrudes.createInput(
+        prof, adsk.fusion.FeatureOperations.NewBodyFeatureOperation)
+    # ui = adsk.core.Application.get().userInterface
+    # ui.messageBox('Faces:\n{}'.format(plate_body.faces.count))
+    # extent_toentity = adsk.fusion.ToEntityExtentDefinition.create(
+    #     plate_body.faces.item(5), isChained)
+    # extent_toentity.isMinimumSolution = True
+
+    # Extrude Sample 1: A simple way of creating typical extrusions (extrusion that goes from the profile plane the specified distance).
+    # Define a distance extent of 6 mm
+    thickness = adsk.core.ValueInput.createByReal(BEZEL_THICKNESS)
+    extent_thickness = adsk.fusion.DistanceExtentDefinition.create(thickness)
+    extrudeInput.setOneSideExtent(
+        extent_thickness, adsk.fusion.ExtentDirections.PositiveExtentDirection)
+    start_offset = adsk.fusion.OffsetStartDefinition.create(
+        adsk.core.ValueInput.createByReal(PLATE_THICKNESS))
+    extrudeInput.startExtent = start_offset
+    extrude1 = extrudes.add(extrudeInput)
+    # Get the extrusion body
+    bezel_body = extrude1.bodies.item(0)
+    offsetFaces = rootComp.features.offsetFacesFeatures
+    bezel_body.name = "bezel_outline"
+    return bezel_body
 
 
 def extrude_bezel(plate_body, bx0, bx1, by0, by1):
@@ -258,6 +312,22 @@ def extrude_bezel(plate_body, bx0, bx1, by0, by1):
     bezel_body.name = "bezel_outline"
     return bezel_body
 
+
+def sketch_bezel_hull(points):
+    app = adsk.core.Application.get()
+    product = app.activeProduct
+    design = adsk.fusion.Design.cast(product)
+    rootComp = design.rootComponent
+    sketches = rootComp.sketches
+    sketch = sketches.add(rootComp.xYConstructionPlane)
+    point3ds = [adsk.core.Point3D.create(p.x, p.y, p.z) for p in points]
+    sketch_points = [sketch.sketchPoints.add(p) for p in point3ds]
+    for i in range(len(sketch_points) - 1):
+        sketch.sketchCurves.sketchLines.addByTwoPoints(
+            sketch_points[i], sketch_points[i+1])
+    sketch.sketchCurves.sketchLines.addByTwoPoints(
+        sketch_points[-1], sketch_points[0])
+    return sketch
 
 # def sketch_bezel(keys):
 
@@ -329,11 +399,22 @@ def run(context):
         # ui.messageBox('{}, {}; {}, {}'.format(bx0, by0, bx1, by1))
 
         plate_body = extrude_plate(bx0 - 2, bx1 + 2, by0 - 2, by1 + 2)
-        bezel_body = extrude_bezel(
-            plate_body, bx0 - 2, bx1 + 2, by0 - 2, by1 + 2)
         cut_switch_cutouts(plate_body, keys)
-        bezel_points = cut_bezel_cutouts(bezel_body, keys)
-        # hull_points = convex_hull(bezel_points)
+        bezel_sketch = sketch_bezel_cutout(keys)
+        # Start indexing at 1 because the first point is just the origin
+        bezel_points = [bezel_sketch.sketchPoints.item(i).geometry
+                        for i in range(1, bezel_sketch.sketchPoints.count)]
+        bezel_hull_points = convex_hull(bezel_points)
+        bezel_hull_sketch = sketch_bezel_hull(bezel_hull_points)
+        bezel_body = extrude_larger_body(bezel_hull_sketch)
+        bezel_cutout = cut_bezel_cutouts(bezel_body, bezel_sketch)
+        # ui.messageBox('{}'.format(
+        #     any(h.x == h.y == h.z == 0 for h in bezel_points)))
+
+        # ui.messageBox('{}'.format(
+        #     any(h.x == h.y == h.z == 0 for h in hull_points)))
+        # ui.messageBox('{}'.format(len(hull_points)))
+
         # for key in keys:
         #     x = key['x']
         #     y = key['y']

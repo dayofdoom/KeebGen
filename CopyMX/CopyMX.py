@@ -155,6 +155,11 @@ def run(context):
             adsk.core.Vector3D.create(0, 0, 1)
         )
 # try it this way: http://help.autodesk.com/view/fusion360/ENU/?caas=caas/discussion/t5/Fusion-360-API-and-Scripts/Is-it-possible-to-Rotate-a-body-by-multiple-angles-as-you-can-do-in-the-Move-UI/td-p/6234792.html
+
+        switch_collection = adsk.core.ObjectCollection.create()
+        mx_switch_occ = import_switch_model(app).item(0)
+        swocc_transf = mx_switch_occ.transform
+        switch_collection.add(mx_switch_occ.bRepBodies)
         trans = adsk.core.Matrix3D.create()
 
         rotY = adsk.core.Matrix3D.create()

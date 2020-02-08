@@ -7,7 +7,7 @@ import json
 # Standard MX switch is 1.905 cm from center to center
 KEY_UNIT = 1.905
 # and 1.4 cm plate cutout
-SWITCH_RADIUS = 1.4
+SWITCH_DIAMETER = 1.4
 # 3mm plate
 PLATE_THICKNESS = 0.3
 # 6mm bezel
@@ -85,7 +85,7 @@ def cut_switch_cutouts(plate_body, keys):
         #     key['rotation_angle'], ng))
         centerPointCutout = adsk.core.Point3D.create(x, y, 0)
         cornerPointCutout = adsk.core.Point3D.create(
-            x + SWITCH_RADIUS/2, y + SWITCH_RADIUS/2, 0)
+            x + SWITCH_DIAMETER/2, y + SWITCH_DIAMETER/2, 0)
         rect = sketchLinesCutout.addCenterPointRectangle(centerPointCutout,
                                                          cornerPointCutout)
         centerPointRotation = adsk.core.Point3D.create(

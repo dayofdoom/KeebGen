@@ -9,7 +9,7 @@ KEY_UNIT = 1.905
 # and 1.4 cm plate cutout
 SWITCH_DIAMETER = 1.4
 # 3mm plate
-PLATE_THICKNESS = 0.3
+PLATE_THICKNESS = 0.15
 # 6mm bezel
 BEZEL_THICKNESS = 0.6
 
@@ -339,46 +339,75 @@ def run(context):
         cut_switch_cutouts(plate_body, keys)
         bezel_cutout = cut_bezel_cutouts(bezel_body, bezel_sketch)
         orig_switch = import_switch_model().item(0)
-        switch_collection = adsk.core.ObjectCollection.create()
-        for i in range(orig_switch.bRepBodies.count):
-            switch_collection.add(orig_switch.bRepBodies.item(i))
-        trans = adsk.core.Matrix3D.create()
-        rotY = adsk.core.Matrix3D.create()
-        rotY.setToRotation(
-            math.pi,
-            adsk.core.Vector3D.create(
-                0, 1, 0
-            ),
-            adsk.core.Point3D.create(0, 0, 0)
-        )
-        trans.transformBy(rotY)
-        rotX = adsk.core.Matrix3D.create()
-        rotX.setToRotation(
-            math.pi/2,
-            adsk.core.Vector3D.create(
-                1, 0, 0
-            ),
-            adsk.core.Point3D.create(0, 0, 0)
-        )
-        trans.transformBy(rotX)
-        moveInput = rootComp.features.moveFeatures.createInput(
-            switch_collection, trans)
-        rootComp.features.moveFeatures.add(moveInput)
-        ui.messageBox('hihihi')
-        # add_switch(orig_switch,
-        # ui.messageBox('{}'.format(
-        #     any(h.x == h.y == h.z == 0 for h in bezel_points)))
+        fix_first_switch(orig_switch, keys[0])
 
-        # ui.messageBox('{}'.format(
-        #     any(h.x == h.y == h.z == 0 for h in hull_points)))
-        # ui.messageBox('{}'.format(len(hull_points)))
-
-        for key in keys:
-            add_switch(orig_switch, key)
+        badtrans = adsk.core.Matrix3D.create()
+        rotZ = adsk.core.Matrix3D.create()
+        rotZ.setToRotation(
+            math.radians(keys[0]["rotation_angle"]),
+            adsk.core.Vector3D.create(
+                0, 0, 1
+            ),
+            adsk.core.Point3D.create(
+                keys[0]["rotation_x"], keys[0]["rotation_y"], 0)
+        )
+        badtrans.translation = adsk.core.Vector3D.create(
+            badtrans.translation.x + keys[0]["x"] + 0.7375,
+            badtrans.translation.y + keys[0]["y"] + 0.7375,
+            badtrans.translation.z + 0.1 + PLATE_THICKNESS)
+        badtrans.transformBy(rotZ)
+        for key in keys[1:]:
+            add_switch(orig_switch, key, badtrans)
 
     except:
         if ui:
             ui.messageBox('Failed:\n{}'.format(traceback.format_exc()))
+
+
+def fix_first_switch(switch, key):
+    app = adsk.core.Application.get()
+    design = adsk.fusion.Design.cast(app.activeProduct)
+    rootComp = design.rootComponent
+    switch_collection = adsk.core.ObjectCollection.create()
+    for i in range(switch.bRepBodies.count):
+        switch_collection.add(switch.bRepBodies.item(i))
+    trans = adsk.core.Matrix3D.create()
+    rotY = adsk.core.Matrix3D.create()
+    rotY.setToRotation(
+        math.pi,
+        adsk.core.Vector3D.create(
+            0, 1, 0
+        ),
+        adsk.core.Point3D.create(0, 0, 0)
+    )
+    trans.transformBy(rotY)
+    rotX = adsk.core.Matrix3D.create()
+    rotX.setToRotation(
+        math.pi/2,
+        adsk.core.Vector3D.create(
+            1, 0, 0
+        ),
+        adsk.core.Point3D.create(0, 0, 0)
+    )
+    trans.transformBy(rotX)
+    rotZ = adsk.core.Matrix3D.create()
+    rotZ.setToRotation(
+        math.radians(key["rotation_angle"]),
+        adsk.core.Vector3D.create(
+            0, 0, 1
+        ),
+        adsk.core.Point3D.create(
+            key["rotation_x"], key["rotation_y"], 0)
+    )
+
+    trans.translation = adsk.core.Vector3D.create(
+        trans.translation.x + key["x"] + 0.7375,
+        trans.translation.y + key["y"] + 0.7375,
+        trans.translation.z + 0.1 + PLATE_THICKNESS)
+    trans.transformBy(rotZ)
+    moveInput = rootComp.features.moveFeatures.createInput(
+        switch_collection, trans)
+    rootComp.features.moveFeatures.add(moveInput)
 
 
 def offset_key(key):
@@ -445,11 +474,14 @@ def update_current_by_meta(current, meta, cluster):
         current.height = meta.h
 
 
-def add_switch(occ, key):
+def add_switch(occ, key, badtrans):
     app = adsk.core.Application.get()
     design = adsk.fusion.Design.cast(app.activeProduct)
     rootComp = design.rootComponent
     trans = occ.transform.copy()
+    goodtrans = badtrans.copy()
+    goodtrans.invert()
+    trans.transformBy(goodtrans)
     rotZ = adsk.core.Matrix3D.create()
     rotZ.setToRotation(
         math.radians(key["rotation_angle"]),
@@ -462,7 +494,7 @@ def add_switch(occ, key):
     trans.translation = adsk.core.Vector3D.create(
         trans.translation.x + key["x"] + 0.7375,
         trans.translation.y + key["y"] + 0.7375,
-        trans.translation.z + 0.4)
+        trans.translation.z + 0.1 + PLATE_THICKNESS)
     trans.transformBy(rotZ)
     newOcc = rootComp.occurrences.addExistingComponent(
         occ.component, trans)

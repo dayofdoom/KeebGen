@@ -8,10 +8,13 @@ import json
 KEY_UNIT = 1.905
 # and 1.4 cm plate cutout
 SWITCH_DIAMETER = 1.4
-# 3mm plate
-PLATE_THICKNESS = 0.15
-# 6mm bezel
-BEZEL_THICKNESS = 0.6
+# plate config
+PLATE_THICKNESS = 0.3
+# bezel config
+BEZEL_THICKNESS_0 = 0.3
+BEZEL_THICKNESS_1 = 0.3
+# Distance from key 1.905 box to inner edge of bezel
+BEZEL_KEY_BUFFER = 0.0475
 
 
 def cross(u, v):
@@ -168,7 +171,7 @@ def sketch_bezel_cutout(keys):
         #     key['rotation_angle'], ng))
         centerPointCutout = adsk.core.Point3D.create(x, y, 0)
         cornerPointCutout = adsk.core.Point3D.create(
-            x + key['width']/2, y + key['height']/2, 0)
+            x + key['width']/2 + BEZEL_KEY_BUFFER, y + key['height']/2 + BEZEL_KEY_BUFFER, 0)
         rect = sketchLinesCutout.addCenterPointRectangle(centerPointCutout,
                                                          cornerPointCutout)
         centerPointRotation = adsk.core.Point3D.create(
@@ -324,11 +327,18 @@ def run(context):
         bezel_hull_points = convex_hull(bezel_points)
         bezel_hull_sketch = sketch_bezel_hull(bezel_hull_points)
         # bezel_body = extrude_larger_body(bezel_hull_sketch)
-        bezel_body = extrude_larger_body(
+        bezel_body_0 = extrude_larger_body(
             bezel_hull_sketch, 1,
-            adsk.core.ValueInput.createByReal(BEZEL_THICKNESS),
+            adsk.core.ValueInput.createByReal(BEZEL_THICKNESS_0),
             adsk.core.ValueInput.createByReal(PLATE_THICKNESS),
             adsk.fusion.ExtentDirections.PositiveExtentDirection)
+        bezel_body_1 = extrude_larger_body(
+            bezel_hull_sketch, 1,
+            adsk.core.ValueInput.createByReal(BEZEL_THICKNESS_1),
+            adsk.core.ValueInput.createByReal(
+                PLATE_THICKNESS + BEZEL_THICKNESS_0),
+            adsk.fusion.ExtentDirections.PositiveExtentDirection,
+            already_offset=True)
         plate_body = extrude_larger_body(
             bezel_hull_sketch, 1,
             adsk.core.ValueInput.createByReal(PLATE_THICKNESS),
@@ -337,7 +347,7 @@ def run(context):
             already_offset=True
         )
         cut_switch_cutouts(plate_body, keys)
-        bezel_cutout = cut_bezel_cutouts(bezel_body, bezel_sketch)
+        bezel_cutout = cut_bezel_cutouts(bezel_body_0, bezel_sketch)
         orig_switch = import_switch_model().item(0)
         fix_first_switch(orig_switch, keys[0])
 

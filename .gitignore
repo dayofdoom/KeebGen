@@ -1,3 +1,4 @@
 f360.code-workspace
 sample-data/switch.STEP
 .vscode
+**/*.pyc

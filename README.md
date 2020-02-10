@@ -25,9 +25,11 @@ To run the script, launch Fusion 360 and within a design press `Shift + S` to op
 
 A number of sample JSON files have been included for testing in this repository, under the `sample-data` directory.
 
-Here you can see a couple examples of models generated with the included sample-data KLE JSON files for the Atreus and JD40 keyboards:
+Here you can see a couple examples of models generated with the included sample-data KLE JSON files for the Atreus, OG Space Cadet, and JD40 keyboard layouts:
 
 ![Atreus](Images/atreus.png)
+
+![OG Space Cadet](Images/space-cadet.png)
 
 ![JD40](Images/jd40.png)
 
@@ -38,13 +40,16 @@ This script is currently in its very early stages of development. Its feature se
 * Generate a plate from an arbitrary KLE
 * Generate a matching bezel layer for the plate
 * Shape the plate and bezel using an offset convex hull around the bezel
+* Insert switches in the correct position and orientation in the switch plate
 
 Due to an encoding issue, it's recommended that you don't try to use any unicode characters (including arrow symbols for example) in your KLE JSON file. There is a button in KLE settings to remove all legends.
 
 ## Upcoming work
 
-* Position all switches at the appropriate location and orientation inside the switch plate.
+* Fix the JSON encoding issue that causes KLEs with unicode characters (like arrow symbols) to crash
 * Position the corresponding keycap (including legend) if one exists in a selected keycap models directory.
+* Extend case design to include a mid-section and base.
+* Create a configuration file syntax to allow easy repeatable case generation without changing code directly. Would like to include different case styles (e.g. hipro/lopro, CNC vs laser cut) and custom measurements/tolerances (e.g. distance to bezel wall, minimum wall thickness, etc).
 
 ## Recommended Resources
 
@@ -55,5 +60,10 @@ Due to an encoding issue, it's recommended that you don't try to use any unicode
 [Keyboard Layout Editor (KLE)](http://www.keyboard-layout-editor.com)
 
 ## Contribution
+All original code in this repository is Free Software licensed under [GNU GPLv3](https://www.gnu.org/licenses/gpl-3.0.en.html).
 
-I'm really excited that you want to extend or contribute to this script! If you make a new feature and want to merge it into this repo, feel free to shoot me a pull request. This repository is Free Software licensed under [GNU GPLv3](https://www.gnu.org/licenses/gpl-3.0.en.html).
+I'd be really stoked if anyone wants to extend or contribute to this script! If you make a new feature and want to merge it into this repo, feel free to shoot me a pull request. 
+
+The sample-data folder is only for use as test data for developing software and is not intended to confer any license or rights to use the respective keyboard layouts in commercial products.
+
+Please respect the designers who spend countless hours developing and iterating on their keyboard ideas: support the original designers, don't buy clones, and don't use this software to make evil ripoff cases!

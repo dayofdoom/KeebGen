@@ -30,8 +30,6 @@ def run(context):
         # Get extrude features
         extrudes = rootComp.features.extrudeFeatures
 
-        ui.messageBox('hihi')
-
         # Create sketch for main plate area
         sketches = rootComp.sketches
         file_name = ui_commands.file_select(

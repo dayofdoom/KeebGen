@@ -6,18 +6,77 @@ import json
 from .Modules import ui_commands
 from .Modules import geometry
 from .Modules import KLE
+from .Modules import Switches
+from .Modules import Config
 
-# Standard MX switch is 1.905 cm from center to center
-KEY_UNIT = 1.905
-# and 1.4 cm plate cutout
-SWITCH_DIAMETER = 1.4
-# plate config
-PLATE_THICKNESS = 0.3
-# bezel config
-BEZEL_THICKNESS_0 = 0.3
-BEZEL_THICKNESS_1 = 0.3
-# Distance from key 1.905 box to inner edge of bezel
-BEZEL_KEY_BUFFER = 0.0475
+
+def run(context):
+    """This function will be called by fusion as the "main" method."""
+    ui = None
+    try:
+        app = adsk.core.Application.get()
+        ui = app.userInterface
+
+        # Create a document.
+        doc = app.documents.add(
+            adsk.core.DocumentTypes.FusionDesignDocumentType)
+
+        product = app.activeProduct
+        design = adsk.fusion.Design.cast(product)
+
+        # Get the root component of the active design
+        rootComp = design.rootComponent
+
+        # Get extrude features
+        extrudes = rootComp.features.extrudeFeatures
+
+        ui.messageBox('hihi')
+
+        # Create sketch for main plate area
+        sketches = rootComp.sketches
+        file_name = ui_commands.file_select(
+            'Select a JSON-serialized KLE file', '*.json')
+        try:
+            with open(file_name, 'r') as fp:
+                keys = KLE.deserialize(json.load(fp))
+        except FileNotFoundError:
+            return
+
+        keys = [KLE.offset_key(key) for key in keys]
+        keys = [KLE.scale_key(Config.KEY_UNIT, key) for key in keys]
+        bezel_sketch = sketch_bezel_cutout(keys)
+        # Start indexing at 1 because the first point is just the origin
+        bezel_points = [bezel_sketch.sketchPoints.item(i).geometry
+                        for i in range(1, bezel_sketch.sketchPoints.count)]
+        bezel_hull_points = geometry.convex_hull(bezel_points)
+        bezel_hull_sketch = sketch_bezel_hull(bezel_hull_points)
+        # bezel_body = extrude_larger_body(bezel_hull_sketch)
+        bezel_body_0 = extrude_larger_body(
+            bezel_hull_sketch, 1,
+            adsk.core.ValueInput.createByReal(Config.BEZEL_THICKNESS_0),
+            adsk.core.ValueInput.createByReal(Config.PLATE_THICKNESS),
+            adsk.fusion.ExtentDirections.PositiveExtentDirection)
+        bezel_body_1 = extrude_larger_body(
+            bezel_hull_sketch, 1,
+            adsk.core.ValueInput.createByReal(Config.BEZEL_THICKNESS_1),
+            adsk.core.ValueInput.createByReal(
+                Config.PLATE_THICKNESS + Config.BEZEL_THICKNESS_0),
+            adsk.fusion.ExtentDirections.PositiveExtentDirection,
+            already_offset=True)
+        plate_body = extrude_larger_body(
+            bezel_hull_sketch, 1,
+            adsk.core.ValueInput.createByReal(Config.PLATE_THICKNESS),
+            adsk.core.ValueInput.createByReal(0),
+            adsk.fusion.ExtentDirections.PositiveExtentDirection,
+            already_offset=True
+        )
+        cut_switch_cutouts(plate_body, keys)
+        bezel_cutout = cut_bezel_cutouts(bezel_body_0, bezel_sketch)
+        Switches.place_switches(keys)
+
+    except:
+        if ui:
+            ui.messageBox('Failed:\n{}'.format(traceback.format_exc()))
 
 
 def cut_switch_cutouts(plate_body, keys):
@@ -40,7 +99,7 @@ def cut_switch_cutouts(plate_body, keys):
         #     key['rotation_angle'], ng))
         centerPointCutout = adsk.core.Point3D.create(x, y, 0)
         cornerPointCutout = adsk.core.Point3D.create(
-            x + SWITCH_DIAMETER/2, y + SWITCH_DIAMETER/2, 0)
+            x + Config.SWITCH_DIAMETER/2, y + Config.SWITCH_DIAMETER/2, 0)
         rect = sketchLinesCutout.addCenterPointRectangle(centerPointCutout,
                                                          cornerPointCutout)
         centerPointRotation = adsk.core.Point3D.create(
@@ -123,7 +182,10 @@ def sketch_bezel_cutout(keys):
         #     key['rotation_angle'], ng))
         centerPointCutout = adsk.core.Point3D.create(x, y, 0)
         cornerPointCutout = adsk.core.Point3D.create(
-            x + key['width']/2 + BEZEL_KEY_BUFFER, y + key['height']/2 + BEZEL_KEY_BUFFER, 0)
+            x + key['width']/2 + Config.BEZEL_KEY_BUFFER,
+            y + key['height']/2 + Config.BEZEL_KEY_BUFFER,
+            0
+        )
         rect = sketchLinesCutout.addCenterPointRectangle(centerPointCutout,
                                                          cornerPointCutout)
         centerPointRotation = adsk.core.Point3D.create(
@@ -147,7 +209,7 @@ def sketch_bezel_cutout(keys):
     return sketchCutout
 
 
-def extrude_larger_body(single_profile_sketch, extra, thickness, offset, direction, already_offset=False):
+def extrude_larger_body(inner_sketch, extra, thickness, offset, direction, already_offset=False):
     app = adsk.core.Application.get()
 
     product = app.activeProduct
@@ -159,16 +221,15 @@ def extrude_larger_body(single_profile_sketch, extra, thickness, offset, directi
     # Get extrude features
     extrudes = rootComp.features.extrudeFeatures
     innerCurves = adsk.core.ObjectCollection.create()
-    single_profile_sketch.sketchCurves
-    curves = single_profile_sketch.sketchCurves
+    curves = inner_sketch.sketchCurves
     for i in range(curves.count):
         innerCurves.add(curves.item(i))
     # assume a point in the negative xy quadrant is outside
     outside_point = adsk.core.Point3D.create(-1, -1, 0)
     if not already_offset:
-        offsetCurves = single_profile_sketch.offset(
+        offsetCurves = inner_sketch.offset(
             innerCurves, outside_point, extra)
-    profs = single_profile_sketch.profiles
+    profs = inner_sketch.profiles
     profCollection = adsk.core.ObjectCollection.create()
     for i in range(profs.count):
         profCollection.add(profs.item(i))
@@ -213,186 +274,5 @@ def sketch_bezel_hull(points):
     return sketch
 
 
-def run(context):
-    ui = None
-    try:
-        app = adsk.core.Application.get()
-        ui = app.userInterface
-
-        # Create a document.
-        doc = app.documents.add(
-            adsk.core.DocumentTypes.FusionDesignDocumentType)
-
-        product = app.activeProduct
-        design = adsk.fusion.Design.cast(product)
-
-        # Get the root component of the active design
-        rootComp = design.rootComponent
-
-        # Get extrude features
-        extrudes = rootComp.features.extrudeFeatures
-
-        # Create sketch for main plate area
-        sketches = rootComp.sketches
-        file_name = ui_commands.file_select(
-            'Select a JSON-serialized KLE file', '*.json')
-        try:
-            with open(file_name, 'r') as fp:
-                keys = KLE.deserialize(json.load(fp))
-        except FileNotFoundError:
-            return
-
-        keys = [KLE.offset_key(key) for key in keys]
-        keys = [KLE.scale_key(KEY_UNIT, key) for key in keys]
-        bezel_sketch = sketch_bezel_cutout(keys)
-        # Start indexing at 1 because the first point is just the origin
-        bezel_points = [bezel_sketch.sketchPoints.item(i).geometry
-                        for i in range(1, bezel_sketch.sketchPoints.count)]
-        bezel_hull_points = geometry.convex_hull(bezel_points)
-        bezel_hull_sketch = sketch_bezel_hull(bezel_hull_points)
-        # bezel_body = extrude_larger_body(bezel_hull_sketch)
-        bezel_body_0 = extrude_larger_body(
-            bezel_hull_sketch, 1,
-            adsk.core.ValueInput.createByReal(BEZEL_THICKNESS_0),
-            adsk.core.ValueInput.createByReal(PLATE_THICKNESS),
-            adsk.fusion.ExtentDirections.PositiveExtentDirection)
-        bezel_body_1 = extrude_larger_body(
-            bezel_hull_sketch, 1,
-            adsk.core.ValueInput.createByReal(BEZEL_THICKNESS_1),
-            adsk.core.ValueInput.createByReal(
-                PLATE_THICKNESS + BEZEL_THICKNESS_0),
-            adsk.fusion.ExtentDirections.PositiveExtentDirection,
-            already_offset=True)
-        plate_body = extrude_larger_body(
-            bezel_hull_sketch, 1,
-            adsk.core.ValueInput.createByReal(PLATE_THICKNESS),
-            adsk.core.ValueInput.createByReal(0),
-            adsk.fusion.ExtentDirections.PositiveExtentDirection,
-            already_offset=True
-        )
-        cut_switch_cutouts(plate_body, keys)
-        bezel_cutout = cut_bezel_cutouts(bezel_body_0, bezel_sketch)
-        orig_switch = import_switch_model().item(0)
-        fix_first_switch(orig_switch, keys[0])
-
-        badtrans = adsk.core.Matrix3D.create()
-        rotZ = adsk.core.Matrix3D.create()
-        rotZ.setToRotation(
-            math.radians(keys[0]["rotation_angle"]),
-            adsk.core.Vector3D.create(
-                0, 0, 1
-            ),
-            adsk.core.Point3D.create(
-                keys[0]["rotation_x"], keys[0]["rotation_y"], 0)
-        )
-        badtrans.translation = adsk.core.Vector3D.create(
-            badtrans.translation.x + keys[0]["x"] + 0.7375,
-            badtrans.translation.y + keys[0]["y"] + 0.7375,
-            badtrans.translation.z + 0.1 + PLATE_THICKNESS)
-        badtrans.transformBy(rotZ)
-        for key in keys[1:]:
-            add_switch(orig_switch, key, badtrans)
-
-    except:
-        if ui:
-            ui.messageBox('Failed:\n{}'.format(traceback.format_exc()))
-
-
-def fix_first_switch(switch, key):
-    app = adsk.core.Application.get()
-    design = adsk.fusion.Design.cast(app.activeProduct)
-    rootComp = design.rootComponent
-    switch_collection = adsk.core.ObjectCollection.create()
-    for i in range(switch.bRepBodies.count):
-        switch_collection.add(switch.bRepBodies.item(i))
-    trans = adsk.core.Matrix3D.create()
-    rotY = adsk.core.Matrix3D.create()
-    rotY.setToRotation(
-        math.pi,
-        adsk.core.Vector3D.create(
-            0, 1, 0
-        ),
-        adsk.core.Point3D.create(0, 0, 0)
-    )
-    trans.transformBy(rotY)
-    rotX = adsk.core.Matrix3D.create()
-    rotX.setToRotation(
-        math.pi/2,
-        adsk.core.Vector3D.create(
-            1, 0, 0
-        ),
-        adsk.core.Point3D.create(0, 0, 0)
-    )
-    trans.transformBy(rotX)
-    rotZ = adsk.core.Matrix3D.create()
-    rotZ.setToRotation(
-        math.radians(key["rotation_angle"]),
-        adsk.core.Vector3D.create(
-            0, 0, 1
-        ),
-        adsk.core.Point3D.create(
-            key["rotation_x"], key["rotation_y"], 0)
-    )
-
-    trans.translation = adsk.core.Vector3D.create(
-        trans.translation.x + key["x"] + 0.7375,
-        trans.translation.y + key["y"] + 0.7375,
-        trans.translation.z + 0.1 + PLATE_THICKNESS)
-    trans.transformBy(rotZ)
-    moveInput = rootComp.features.moveFeatures.createInput(
-        switch_collection, trans)
-    rootComp.features.moveFeatures.add(moveInput)
-
-
-def add_switch(occ, key, badtrans):
-    app = adsk.core.Application.get()
-    design = adsk.fusion.Design.cast(app.activeProduct)
-    rootComp = design.rootComponent
-    trans = occ.transform.copy()
-    goodtrans = badtrans.copy()
-    goodtrans.invert()
-    trans.transformBy(goodtrans)
-    rotZ = adsk.core.Matrix3D.create()
-    rotZ.setToRotation(
-        math.radians(key["rotation_angle"]),
-        adsk.core.Vector3D.create(
-            0, 0, 1
-        ),
-        adsk.core.Point3D.create(
-            key["rotation_x"], key["rotation_y"], 0)
-    )
-    trans.translation = adsk.core.Vector3D.create(
-        trans.translation.x + key["x"] + 0.7375,
-        trans.translation.y + key["y"] + 0.7375,
-        trans.translation.z + 0.1 + PLATE_THICKNESS)
-    trans.transformBy(rotZ)
-    newOcc = rootComp.occurrences.addExistingComponent(
-        occ.component, trans)
-    newOcc.transform = trans
-    return
-
-
-def import_switch_model():
-    app = adsk.core.Application.get()
-    ui = app.userInterface
-    design = app.activeProduct
-    rootComp = design.rootComponent
-    try:
-
-        # Import a selected STEP file into the root component
-        stepImportOptions = app.importManager.createSTEPImportOptions(
-            prompt_switch_file_select()
-        )
-        # this version of the method returns the imported model ref
-        return app.importManager.importToTarget2(stepImportOptions, rootComp)
-    except:
-        if ui:
-            ui.messageBox('Failed:\n{}'.format(traceback.format_exc()))
-
-
 def prompt_KLE_file_select():
     return ui_commands.file_select('Select a JSON-serialized KLE file', '*.json')
-
-
-def prompt_switch_file_select():
-    return ui_commands.file_select('Select a switch STEP file', '*.STEP')

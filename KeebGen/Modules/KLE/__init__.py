@@ -1,3 +1,22 @@
+import json
+from .. import ui_commands
+from .. import Config
+
+
+def get_keys():
+    file_name = ui_commands.file_select(
+        'Select a JSON-serialized KLE file', '*.json')
+    try:
+        with open(file_name, 'r') as fp:
+            keys = deserialize(json.load(fp))
+    except FileNotFoundError:
+        return
+
+    keys = [offset_key(key) for key in keys]
+    keys = [scale_key(Config.KEY_UNIT, key) for key in keys]
+    return keys
+
+
 def offset_key(key):
     new_key = key.copy()
     new_key['x'] = new_key['x'] + new_key['width'] / 2

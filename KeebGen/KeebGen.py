@@ -2,12 +2,65 @@ import adsk.core
 import adsk.fusion
 import traceback
 import math
-import json
 from .Modules import ui_commands
 from .Modules import geometry
 from .Modules import KLE
 from .Modules import Switches
 from .Modules import Config
+
+
+def main():
+    # Some boilerplate extracting important fusion objects
+    app = adsk.core.Application.get()
+    doc = app.documents.add(
+        adsk.core.DocumentTypes.FusionDesignDocumentType)
+    product = app.activeProduct
+    design = adsk.fusion.Design.cast(product)
+    rootComp = design.rootComponent
+    ui = app.userInterface
+    # Get extrude features
+    extrudes = rootComp.features.extrudeFeatures
+    # Create sketch for main plate area
+    sketches = rootComp.sketches
+
+    keys = KLE.get_keys()
+
+    bezel_sketch = sketch_bezel_cutout(keys)
+    # Start indexing at 1 because the first point is just the origin
+    bezel_points = [bezel_sketch.sketchPoints.item(i).geometry
+                    for i in range(1, bezel_sketch.sketchPoints.count)]
+    bezel_hull_points = geometry.convex_hull(bezel_points)
+    bezel_hull_sketch = sketch_bezel_hull(bezel_hull_points)
+    # bezel_body = extrude_larger_body(bezel_hull_sketch)
+    bezel_body_0 = extrude_larger_body(
+        bezel_hull_sketch, 1,
+        adsk.core.ValueInput.createByReal(Config.BEZEL_THICKNESS_0),
+        adsk.core.ValueInput.createByReal(Config.PLATE_THICKNESS),
+        adsk.fusion.ExtentDirections.PositiveExtentDirection)
+    bezel_body_1 = extrude_larger_body(
+        bezel_hull_sketch, 0,
+        adsk.core.ValueInput.createByReal(Config.BEZEL_THICKNESS_1),
+        adsk.core.ValueInput.createByReal(
+            Config.PLATE_THICKNESS + Config.BEZEL_THICKNESS_0),
+        adsk.fusion.ExtentDirections.PositiveExtentDirection
+    )
+    plate_body = extrude_larger_body(
+        bezel_hull_sketch, 0,
+        adsk.core.ValueInput.createByReal(Config.PLATE_THICKNESS),
+        adsk.core.ValueInput.createByReal(0),
+        adsk.fusion.ExtentDirections.PositiveExtentDirection
+    )
+    cut_switch_cutouts(plate_body, keys)
+    bezel_cutout = cut_bezel_cutouts(bezel_body_0, bezel_sketch)
+    mid_sketch = sketch_bezel_hull(bezel_hull_points)
+    mid_cutout = sketch_bezel_hull(bezel_hull_points)
+    mid_layer = extrude_larger_body(
+        mid_sketch, -0.2,
+        adsk.core.ValueInput.createByReal(Config.PLATE_THICKNESS * 2),
+        adsk.core.ValueInput.createByReal(0),
+        adsk.fusion.ExtentDirections.NegativeExtentDirection
+    )
+    # Switches.place_switches(keys)
 
 
 def run(context):
@@ -16,76 +69,15 @@ def run(context):
     try:
         app = adsk.core.Application.get()
         ui = app.userInterface
-
-        # Create a document.
-        doc = app.documents.add(
-            adsk.core.DocumentTypes.FusionDesignDocumentType)
-
-        product = app.activeProduct
-        design = adsk.fusion.Design.cast(product)
-
-        # Get the root component of the active design
-        rootComp = design.rootComponent
-
-        # Get extrude features
-        extrudes = rootComp.features.extrudeFeatures
-
-        # Create sketch for main plate area
-        sketches = rootComp.sketches
-        file_name = ui_commands.file_select(
-            'Select a JSON-serialized KLE file', '*.json')
-        try:
-            with open(file_name, 'r') as fp:
-                keys = KLE.deserialize(json.load(fp))
-        except FileNotFoundError:
-            return
-
-        keys = [KLE.offset_key(key) for key in keys]
-        keys = [KLE.scale_key(Config.KEY_UNIT, key) for key in keys]
-        bezel_sketch = sketch_bezel_cutout(keys)
-        # Start indexing at 1 because the first point is just the origin
-        bezel_points = [bezel_sketch.sketchPoints.item(i).geometry
-                        for i in range(1, bezel_sketch.sketchPoints.count)]
-        bezel_hull_points = geometry.convex_hull(bezel_points)
-        bezel_hull_sketch = sketch_bezel_hull(bezel_hull_points)
-        # bezel_body = extrude_larger_body(bezel_hull_sketch)
-        bezel_body_0 = extrude_larger_body(
-            bezel_hull_sketch, 1,
-            adsk.core.ValueInput.createByReal(Config.BEZEL_THICKNESS_0),
-            adsk.core.ValueInput.createByReal(Config.PLATE_THICKNESS),
-            adsk.fusion.ExtentDirections.PositiveExtentDirection)
-        bezel_body_1 = extrude_larger_body(
-            bezel_hull_sketch, 1,
-            adsk.core.ValueInput.createByReal(Config.BEZEL_THICKNESS_1),
-            adsk.core.ValueInput.createByReal(
-                Config.PLATE_THICKNESS + Config.BEZEL_THICKNESS_0),
-            adsk.fusion.ExtentDirections.PositiveExtentDirection,
-            already_offset=True)
-        plate_body = extrude_larger_body(
-            bezel_hull_sketch, 1,
-            adsk.core.ValueInput.createByReal(Config.PLATE_THICKNESS),
-            adsk.core.ValueInput.createByReal(0),
-            adsk.fusion.ExtentDirections.PositiveExtentDirection,
-            already_offset=True
-        )
-        cut_switch_cutouts(plate_body, keys)
-        bezel_cutout = cut_bezel_cutouts(bezel_body_0, bezel_sketch)
-        Switches.place_switches(keys)
-
+        main()
     except:
         if ui:
             ui.messageBox('Failed:\n{}'.format(traceback.format_exc()))
 
 
-def cut_switch_cutouts(plate_body, keys):
-    app = adsk.core.Application.get()
-    product = app.activeProduct
+def sketch_switch_cutouts(keys):
     design = adsk.fusion.Design.cast(product)
-    ui = adsk.core.Application.get().userInterface
-
-    # Get the root component of the active design
     rootComp = design.rootComponent
-    extrudes = rootComp.features.extrudeFeatures
     sketches = rootComp.sketches
     sketchCutout = sketches.add(rootComp.xYConstructionPlane)
     sketchLinesCutout = sketchCutout.sketchCurves.sketchLines
@@ -118,6 +110,19 @@ def cut_switch_cutouts(plate_body, keys):
         )
         ogTransform.transformBy(rotZ)
         sketchCutout.move(sketchParts, ogTransform)
+    return
+
+
+def cut_switch_cutouts(plate_body, keys):
+    app = adsk.core.Application.get()
+    product = app.activeProduct
+    design = adsk.fusion.Design.cast(product)
+    ui = adsk.core.Application.get().userInterface
+
+    # Get the root component of the active design
+    rootComp = design.rootComponent
+    extrudes = rootComp.features.extrudeFeatures
+
     profCutout = sketchCutout.profiles
     profCollection = adsk.core.ObjectCollection.create()
     for i in range(profCutout.count):
@@ -207,7 +212,7 @@ def sketch_bezel_cutout(keys):
     return sketchCutout
 
 
-def extrude_larger_body(inner_sketch, extra, thickness, offset, direction, already_offset=False):
+def extrude_larger_body(inner_sketch, extra, thickness, offset, direction):
     app = adsk.core.Application.get()
 
     product = app.activeProduct
@@ -224,7 +229,7 @@ def extrude_larger_body(inner_sketch, extra, thickness, offset, direction, alrea
         innerCurves.add(curves.item(i))
     # assume a point in the negative xy quadrant is outside
     outside_point = adsk.core.Point3D.create(-1, -1, 0)
-    if not already_offset:
+    if not extra == 0:
         offsetCurves = inner_sketch.offset(
             innerCurves, outside_point, extra)
     profs = inner_sketch.profiles
@@ -270,7 +275,3 @@ def sketch_bezel_hull(points):
     sketch.sketchCurves.sketchLines.addByTwoPoints(
         sketch_points[-1], sketch_points[0])
     return sketch
-
-
-def prompt_KLE_file_select():
-    return ui_commands.file_select('Select a JSON-serialized KLE file', '*.json')

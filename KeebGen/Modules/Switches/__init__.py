@@ -14,7 +14,7 @@ def place_switches(keys):
     badtrans = adsk.core.Matrix3D.create()
     rotZ = adsk.core.Matrix3D.create()
     rotZ.setToRotation(
-        math.radians(keys[0]["rotation_angle"]),
+        keys[0]["rotation_angle"],
         adsk.core.Vector3D.create(
             0, 0, 1
         ),
@@ -58,7 +58,7 @@ def fix_first_switch(switch, key):
     trans.transformBy(rotX)
     rotZ = adsk.core.Matrix3D.create()
     rotZ.setToRotation(
-        math.radians(key["rotation_angle"]),
+        key["rotation_angle"],
         adsk.core.Vector3D.create(
             0, 0, 1
         ),
@@ -86,7 +86,7 @@ def add_switch(occ, key, badtrans):
     trans.transformBy(goodtrans)
     rotZ = adsk.core.Matrix3D.create()
     rotZ.setToRotation(
-        math.radians(key["rotation_angle"]),
+        key["rotation_angle"],
         adsk.core.Vector3D.create(
             0, 0, 1
         ),

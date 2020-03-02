@@ -3,10 +3,12 @@ import adsk.fusion
 import traceback
 import math
 from .Modules import ui_commands
-from .Modules import geometry
+from .Modules import Geometry
 from .Modules import KLE
 from .Modules import Switches
 from .Modules import Config
+from .Modules import Sketches
+from .Modules import Layers
 
 
 def main():
@@ -25,12 +27,9 @@ def main():
 
     keys = KLE.get_keys()
 
-    bezel_sketch = sketch_bezel_cutout(keys)
-    # Start indexing at 1 because the first point is just the origin
-    bezel_points = [bezel_sketch.sketchPoints.item(i).geometry
-                    for i in range(1, bezel_sketch.sketchPoints.count)]
-    bezel_hull_points = geometry.convex_hull(bezel_points)
-    bezel_hull_sketch = sketch_bezel_hull(bezel_hull_points)
+    bezel_sketch = Sketches.bezel_cutout(keys)
+    bezel_hull_sketch = Sketches.bezel_hull(bezel_sketch)
+    Layers.bezel(keys)
     # bezel_body = extrude_larger_body(bezel_hull_sketch)
     bezel_body_0 = extrude_larger_body(
         bezel_hull_sketch, 1,
@@ -52,8 +51,8 @@ def main():
     )
     cut_switch_cutouts(plate_body, keys)
     bezel_cutout = cut_bezel_cutouts(bezel_body_0, bezel_sketch)
-    mid_sketch = sketch_bezel_hull(bezel_hull_points)
-    mid_cutout = sketch_bezel_hull(bezel_hull_points)
+    mid_sketch = Sketches.bezel_hull(bezel_sketch)
+    mid_cutout = Sketches.bezel_hull(bezel_sketch)
     mid_layer = extrude_larger_body(
         mid_sketch, -0.2,
         adsk.core.ValueInput.createByReal(Config.PLATE_THICKNESS * 2),
@@ -75,44 +74,6 @@ def run(context):
             ui.messageBox('Failed:\n{}'.format(traceback.format_exc()))
 
 
-def sketch_switch_cutouts(keys):
-    design = adsk.fusion.Design.cast(product)
-    rootComp = design.rootComponent
-    sketches = rootComp.sketches
-    sketchCutout = sketches.add(rootComp.xYConstructionPlane)
-    sketchLinesCutout = sketchCutout.sketchCurves.sketchLines
-    for key in keys:
-        x = key['x']
-        y = key['y']
-        ng = math.radians(key['rotation_angle'])
-        # ui.messageBox('angle degrees:{}\nangle radians{}'.format(
-        #     key['rotation_angle'], ng))
-        centerPointCutout = adsk.core.Point3D.create(x, y, 0)
-        cornerPointCutout = adsk.core.Point3D.create(
-            x + Config.SWITCH_DIAMETER/2, y + Config.SWITCH_DIAMETER/2, 0)
-        rect = sketchLinesCutout.addCenterPointRectangle(centerPointCutout,
-                                                         cornerPointCutout)
-        centerPointRotation = adsk.core.Point3D.create(
-            key["rotation_x"], key["rotation_y"], 0)
-        sketchParts = adsk.core.ObjectCollection.create()
-        for c in rect:
-            sketchParts.add(c)
-        # for p in sketchCutout.sketchPoints:
-        #     sketchParts.add(p)
-        ogTransform = sketchCutout.transform.copy()
-        rotZ = adsk.core.Matrix3D.create()
-        rotZ.setToRotation(
-            ng,
-            adsk.core.Vector3D.create(
-                0, 0, 1
-            ),
-            centerPointRotation
-        )
-        ogTransform.transformBy(rotZ)
-        sketchCutout.move(sketchParts, ogTransform)
-    return
-
-
 def cut_switch_cutouts(plate_body, keys):
     app = adsk.core.Application.get()
     product = app.activeProduct
@@ -123,6 +84,7 @@ def cut_switch_cutouts(plate_body, keys):
     rootComp = design.rootComponent
     extrudes = rootComp.features.extrudeFeatures
 
+    sketchCutout = Sketches.switch_cutouts(keys)
     profCutout = sketchCutout.profiles
     profCollection = adsk.core.ObjectCollection.create()
     for i in range(profCutout.count):
@@ -166,91 +128,38 @@ def cut_bezel_cutouts(bezel_body, sketchCutout):
     return extrudes.add(extrudeInput)
 
 
-def sketch_bezel_cutout(keys):
-    app = adsk.core.Application.get()
-    product = app.activeProduct
-    design = adsk.fusion.Design.cast(product)
-    ui = adsk.core.Application.get().userInterface
-
-    # Get the root component of the active design
-    rootComp = design.rootComponent
-    sketches = rootComp.sketches
-    sketchCutout = sketches.add(rootComp.xYConstructionPlane)
-    sketchLinesCutout = sketchCutout.sketchCurves.sketchLines
-    for key in keys:
-        x = key['x']
-        y = key['y']
-        ng = math.radians(key['rotation_angle'])
-        # ui.messageBox('angle degrees:{}\nangle radians{}'.format(
-        #     key['rotation_angle'], ng))
-        centerPointCutout = adsk.core.Point3D.create(x, y, 0)
-        cornerPointCutout = adsk.core.Point3D.create(
-            x + key['width']/2 + Config.BEZEL_KEY_BUFFER,
-            y + key['height']/2 + Config.BEZEL_KEY_BUFFER,
-            0
-        )
-        rect = sketchLinesCutout.addCenterPointRectangle(centerPointCutout,
-                                                         cornerPointCutout)
-        centerPointRotation = adsk.core.Point3D.create(
-            key["rotation_x"], key["rotation_y"], 0)
-        sketchParts = adsk.core.ObjectCollection.create()
-        for c in rect:
-            sketchParts.add(c)
-        # for p in sketchCutout.sketchPoints:
-        #     sketchParts.add(p)
-        ogTransform = sketchCutout.transform.copy()
-        rotZ = adsk.core.Matrix3D.create()
-        rotZ.setToRotation(
-            ng,
-            adsk.core.Vector3D.create(
-                0, 0, 1
-            ),
-            centerPointRotation
-        )
-        ogTransform.transformBy(rotZ)
-        sketchCutout.move(sketchParts, ogTransform)
-    return sketchCutout
-
-
 def extrude_larger_body(inner_sketch, extra, thickness, offset, direction):
-    app = adsk.core.Application.get()
 
-    product = app.activeProduct
-    design = adsk.fusion.Design.cast(product)
-
-    # Get the root component of the active design
-    rootComp = design.rootComponent
-
-    # Get extrude features
-    extrudes = rootComp.features.extrudeFeatures
     innerCurves = adsk.core.ObjectCollection.create()
     curves = inner_sketch.sketchCurves
     for i in range(curves.count):
         innerCurves.add(curves.item(i))
     # assume a point in the negative xy quadrant is outside
-    outside_point = adsk.core.Point3D.create(-1, -1, 0)
+    outside_point = adsk.core.Point3D.create(-10, -10, 0)
     if not extra == 0:
         offsetCurves = inner_sketch.offset(
             innerCurves, outside_point, extra)
+
     profs = inner_sketch.profiles
     profCollection = adsk.core.ObjectCollection.create()
     for i in range(profs.count):
         profCollection.add(profs.item(i))
+
+    app = adsk.core.Application.get()
+
+    product = app.activeProduct
+    design = adsk.fusion.Design.cast(product)
+
+    # Get the root component of the active design
+    rootComp = design.rootComponent
+    # Get extrude features
+    extrudes = rootComp.features.extrudeFeatures
     extrudeInput = extrudes.createInput(
         profCollection, adsk.fusion.FeatureOperations.NewBodyFeatureOperation)
-    # ui = adsk.core.Application.get().userInterface
-    # ui.messageBox('Faces:\n{}'.format(plate_body.faces.count))
-    # extent_toentity = adsk.fusion.ToEntityExtentDefinition.create(
-    #     plate_body.faces.item(5), isChained)
-    # extent_toentity.isMinimumSolution = True
-
-    # Extrude Sample 1: A simple way of creating typical extrusions (extrusion that goes from the profile plane the specified distance).
-    # Define a distance extent of 6 mm
     extent_thickness = adsk.fusion.DistanceExtentDefinition.create(thickness)
     extrudeInput.setOneSideExtent(
         extent_thickness, direction)
-    start_offset = adsk.fusion.OffsetStartDefinition.create(offset
-                                                            )
+    start_offset = adsk.fusion.OffsetStartDefinition.create(offset)
     extrudeInput.startExtent = start_offset
     extrude1 = extrudes.add(extrudeInput)
     # Get the extrusion body
@@ -258,20 +167,3 @@ def extrude_larger_body(inner_sketch, extra, thickness, offset, direction):
     offsetFaces = rootComp.features.offsetFacesFeatures
     bezel_body.name = "bezel_outline"
     return bezel_body
-
-
-def sketch_bezel_hull(points):
-    app = adsk.core.Application.get()
-    product = app.activeProduct
-    design = adsk.fusion.Design.cast(product)
-    rootComp = design.rootComponent
-    sketches = rootComp.sketches
-    sketch = sketches.add(rootComp.xYConstructionPlane)
-    point3ds = [adsk.core.Point3D.create(p.x, p.y, p.z) for p in points]
-    sketch_points = [sketch.sketchPoints.add(p) for p in point3ds]
-    for i in range(len(sketch_points) - 1):
-        sketch.sketchCurves.sketchLines.addByTwoPoints(
-            sketch_points[i], sketch_points[i+1])
-    sketch.sketchCurves.sketchLines.addByTwoPoints(
-        sketch_points[-1], sketch_points[0])
-    return sketch

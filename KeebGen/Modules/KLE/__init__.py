@@ -1,4 +1,5 @@
 import json
+import math
 from .. import ui_commands
 from .. import Config
 
@@ -32,7 +33,7 @@ def scale_key(scale, key):
     key["height"] = scale * key["height"]
     key['rotation_x'] = scale * key["rotation_x"]
     key['rotation_y'] = -scale * key["rotation_y"]
-    key['rotation_angle'] = -key["rotation_angle"]
+    key['rotation_angle'] = math.radians(-key["rotation_angle"])
     return key
 
 

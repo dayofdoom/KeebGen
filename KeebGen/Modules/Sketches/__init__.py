@@ -107,7 +107,6 @@ def bezel_hull(bezel_sketch):
             sketch_points[i], sketch_points[i+1])
     sketch.sketchCurves.sketchLines.addByTwoPoints(
         sketch_points[-1], sketch_points[0])
-    sketch.name = "bezel-hull"
     return sketch
 
 
@@ -123,6 +122,8 @@ def offset_sketch(closed_sketch, offset_amount):
     # outerCurves = adsk.core.ObjectCollection.create()
     # for i in range(offsetCurves.count):
     #     outerCurves.add(offsetCurves.item(i))
+
+    # copy the offset curves over to a new sketch
     app = adsk.core.Application.get()
     product = app.activeProduct
     design = adsk.fusion.Design.cast(product)
@@ -130,5 +131,8 @@ def offset_sketch(closed_sketch, offset_amount):
     sketches = rootComp.sketches
     outerSketch = sketches.add(rootComp.xYConstructionPlane)
     closed_sketch.copy(offsetCurves, adsk.core.Matrix3D.create(), outerSketch)
-    outerSketch.name = closed_sketch.name + "-offset"
+    outerSketch.name = closed_sketch.name + \
+        "-offset-" + str(offset_amount / 10) + "mm"
+    for i in range(offsetCurves.count):
+        offsetCurves.item(i).deleteMe()
     return outerSketch

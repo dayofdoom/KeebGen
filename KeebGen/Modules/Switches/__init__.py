@@ -6,6 +6,9 @@ import adsk.fusion
 from .. import ui_commands
 from .. import Config
 
+PLATE_HEIGHT = Config.BOTTOM_THICKNESS + Config.MID_THICKNESS_1 + \
+    Config.MID_THICKNESS_0 + Config.PLATE_THICKNESS
+
 
 def place_switches(keys):
     orig_switch = import_switch_model().item(0)
@@ -21,10 +24,11 @@ def place_switches(keys):
         adsk.core.Point3D.create(
             keys[0]["rotation_x"], keys[0]["rotation_y"], 0)
     )
+
     badtrans.translation = adsk.core.Vector3D.create(
         badtrans.translation.x + keys[0]["x"] + 0.7375,
         badtrans.translation.y + keys[0]["y"] + 0.7375,
-        badtrans.translation.z + 0.1 + Config.PLATE_THICKNESS)
+        badtrans.translation.z + 0.1 + PLATE_HEIGHT)
     badtrans.transformBy(rotZ)
     for key in keys[1:]:
         add_switch(orig_switch, key, badtrans)
@@ -69,7 +73,7 @@ def fix_first_switch(switch, key):
     trans.translation = adsk.core.Vector3D.create(
         trans.translation.x + key["x"] + 0.7375,
         trans.translation.y + key["y"] + 0.7375,
-        trans.translation.z + 0.1 + Config.PLATE_THICKNESS)
+        trans.translation.z + 0.1 + PLATE_HEIGHT)
     trans.transformBy(rotZ)
     moveInput = rootComp.features.moveFeatures.createInput(
         switch_collection, trans)
@@ -96,7 +100,7 @@ def add_switch(occ, key, badtrans):
     trans.translation = adsk.core.Vector3D.create(
         trans.translation.x + key["x"] + 0.7375,
         trans.translation.y + key["y"] + 0.7375,
-        trans.translation.z + 0.1 + Config.PLATE_THICKNESS)
+        trans.translation.z + 0.1 + PLATE_HEIGHT)
     trans.transformBy(rotZ)
     newOcc = rootComp.occurrences.addExistingComponent(
         occ.component, trans)

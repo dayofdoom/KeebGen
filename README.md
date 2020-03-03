@@ -21,7 +21,11 @@ More information can be found in [the official Fusion 360 API documentation](htt
 
 ## Usage
 
-To run the script, launch Fusion 360 and within a design press `Shift + S` to open the script execution menu. Run `KeebGen.py` from the menu, and you should be prompted to select a KLE exported JSON file. Once you have selected your JSON file, the script will do its magic.
+The current implementation will generate a simplified layered acrylic case design. The parameters of the case are configurable in the [Config file](KeebGen/Modules/Config/__init__.py)
+
+In addition to the case parameters, you can turn on switch model insertion by setting the config parameter `INSERT_SWITCHES = True`.
+
+To run the script, launch Fusion 360 and within a design press `Shift + S` to open the script execution menu. Run `KeebGen.py` from the menu, and you should be prompted to select a KLE exported JSON file. Once you have selected your JSON file, the script will do its magic. If you've set `INSERT_SWITCHES = True`, you will also be prompted for a switch model file.
 
 A number of sample JSON files have been included for testing in this repository, under the `sample-data` directory.
 
@@ -33,14 +37,7 @@ Here you can see a couple examples of models generated with the included sample-
 
 ![JD40](Images/jd40.png)
 
-## Features/Limitations/Known Issues
-
-This script is currently in its very early stages of development. Its feature set is quite limited right now:
-
-* Generate a plate from an arbitrary KLE
-* Generate a matching bezel layer for the plate
-* Shape the plate and bezel using an offset convex hull around the bezel
-* Insert switches in the correct position and orientation in the switch plate
+## Limitations/Known Issues
 
 Due to an encoding issue, it's recommended that you don't try to use any unicode characters (including arrow symbols for example) in your KLE JSON file. There is a button in KLE settings to remove all legends.
 
@@ -48,8 +45,7 @@ Due to an encoding issue, it's recommended that you don't try to use any unicode
 
 * Fix the JSON encoding issue that causes KLEs with unicode characters (like arrow symbols) to crash
 * Position the corresponding keycap (including legend) if one exists in a selected keycap models directory.
-* Extend case design to include a mid-section and base.
-* Create a configuration file syntax to allow easy repeatable case generation without changing code directly. Would like to include different case styles (e.g. hipro/lopro, CNC vs laser cut) and custom measurements/tolerances (e.g. distance to bezel wall, minimum wall thickness, etc).
+* Add screw holes and USB cutout to case
 
 ## Recommended Resources
 

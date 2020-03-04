@@ -2,7 +2,7 @@
 
 This is a Python script for [Autodesk Fusion 360](https://www.autodesk.com/products/fusion-360/overview) which will take a JSON file exported from [Keyboard Layout Editor (KLE)](http://www.keyboard-layout-editor.com), and construct a CAD model of the keyboard.
 
-The intent is to automate the boilerplate steps of moving from KLE to a fleshed-out CAD model that can be used to create generic concept renders and animations.
+The intent is to automate the boilerplate steps of moving from KLE to a fleshed-out CAD model that can be used to create generic concept renders, animations, and the necessary files to send a design into production.
 
 Additionally, because the model is scripted within Fusion 360's non-destructive design timeline, it should be routine to go back and tweak the design parameters at any step in time to create a more advanced design than the generic default model.
 
